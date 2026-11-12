@@ -181,6 +181,45 @@ def me(account_id: str = Depends(current_user)):
             "SELECT id,email,display_name,created_at FROM accounts WHERE id=%s", (account_id,),
         ).fetchone()
 
+ALPHA_STARTER_KOPECKS = 1_000_000  # 10,000 game rubles, one grant per account.
+
+def _grant_starter(conn, account_id, company_id):
+    """Account lock prevents two concurrent companies claiming the same grant."""
+    conn.execute("SELECT id FROM accounts WHERE id=%s FOR UPDATE", (account_id,))
+    wallet = conn.execute(
+        "SELECT id FROM wallets WHERE company_id=%s FOR UPDATE", (company_id,)
+    ).fetchone()
+    granted = conn.execute(
+        "INSERT INTO alpha_starter_grants(account_id,company_id,wallet_id,amount_kopecks) "
+        "VALUES(%s,%s,%s,%s) ON CONFLICT(account_id) DO NOTHING RETURNING account_id",
+        (account_id, company_id, wallet["id"], ALPHA_STARTER_KOPECKS),
+    ).fetchone()
+    if granted:
+        conn.execute(
+            "UPDATE wallets SET balance_kopecks=balance_kopecks+%s WHERE id=%s",
+            (ALPHA_STARTER_KOPECKS, wallet["id"]),
+        )
+        conn.execute(
+            "INSERT INTO security_audit(event_type,actor_account_id,subject_id) "
+            "VALUES('alpha.starter_granted',%s,%s)",
+            (account_id, company_id),
+        )
+    return ALPHA_STARTER_KOPECKS if granted else 0
+
+
+@app.post("/v1/companies/{company_id}/starter-grant")
+def claim_alpha_starter(company_id: UUID, account_id: str = Depends(current_user)):
+    with connect() as conn:
+        company = conn.execute(
+            "SELECT id FROM companies WHERE id=%s AND owner_account_id=%s",
+            (company_id, account_id),
+        ).fetchone()
+        if not company:
+            raise HTTPException(404, "Company not found")
+        amount = _grant_starter(conn, account_id, company_id)
+    return {"granted_kopecks": amount}
+
+
 @app.post("/v1/companies", status_code=201)
 def create_company(data: CompanyRequest, account_id: str = Depends(current_user)):
     with connect() as conn:
@@ -191,8 +230,9 @@ def create_company(data: CompanyRequest, account_id: str = Depends(current_user)
         wallet = conn.execute(
             "INSERT INTO wallets(company_id) VALUES(%s) RETURNING id", (row["id"],),
         ).fetchone()
+        grant = _grant_starter(conn, account_id, row["id"])
         conn.execute("INSERT INTO security_audit(event_type,actor_account_id,subject_id) VALUES(%s,%s,%s)", ("company.created",account_id,row["id"]))
-    return {"id": str(row["id"]), "name": row["name"], "wallet_id": str(wallet["id"])}
+    return {"id": str(row["id"]), "name": row["name"], "wallet_id": str(wallet["id"]), "starter_granted_kopecks": grant}
 
 @app.get("/v1/companies")
 def list_companies(account_id: str = Depends(current_user)):
