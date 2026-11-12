@@ -44,6 +44,7 @@ class WorldTests(unittest.TestCase):
         with connect() as conn:
             conn.execute("DELETE FROM world_buildings WHERE plot_id=%s", (self.plot,))
             conn.execute("UPDATE world_plots SET owner_company_id=NULL WHERE id=%s", (self.plot,))
+            conn.execute("DELETE FROM world_plots WHERE sector_id=%s AND generated_by_growth=true", ("ufa-prototype-01",))
             conn.execute("DELETE FROM companies WHERE id=ANY(%s::uuid[])", (self.companies,))
             conn.execute("DELETE FROM accounts WHERE id=ANY(%s::uuid[])", (self.accounts,))
 
@@ -58,6 +59,9 @@ class WorldTests(unittest.TestCase):
     def test_building_and_double_claim(self):
         result=construct(self.req(),str(self.accounts[0]))
         self.assertEqual(result["building_type"],"shop")
+        self.assertGreater(result["new_plots"], 0)
+        expanded = sector_map("ufa-prototype-01")
+        self.assertGreater(len(expanded["plots"]), 6)
         with self.assertRaises(HTTPException) as ctx:
             construct(self.req(1),str(self.accounts[1]))
         self.assertEqual(ctx.exception.status_code,409)
