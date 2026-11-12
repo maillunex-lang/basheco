@@ -95,6 +95,9 @@ func _run() -> void:
     var near_bounds: Array[int] = [100, 120, 160, 180]
     world.geo_background._refresh_spatial_chunks(near_bounds)
     assert(world.geo_background.spatial_loaded.size() <= world.geo_background.MAX_ACTIVE_CHUNKS)
+    assert(world.geo_background.pending_chunks.size() <= world.geo_background.MAX_ACTIVE_CHUNKS)
+    world.geo_background.process_pending_chunks()
+    assert(world.geo_background.spatial_loaded.size() <= world.geo_background.MAX_ACTIVE_CHUNKS)
     assert(first_chunk_keys.size() > 0)
     assert(world.geo_background.manifest["feature_counts"]["forest"] >= 1)
     assert(world.geo_background.manifest["feature_counts"]["water"] >= 1)
