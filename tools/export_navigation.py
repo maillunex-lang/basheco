@@ -2,7 +2,7 @@
 
 Run from repository root:
     python tools/export_navigation.py
-No network, no database and no generated coordinates.
+No network, no database and no generated coordinates.\nThe output is committed by the navigation-catalog workflow.
 """
 from __future__ import annotations
 
