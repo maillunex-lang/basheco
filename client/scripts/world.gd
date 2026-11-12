@@ -351,7 +351,7 @@ func _draw() -> void:
     # the on-screen part of the grid are drawn, and only at full detail.
     var corners := PackedVector2Array([project_cell(Vector2i(left, top)), project_cell(Vector2i(right, top)),
         project_cell(Vector2i(right, bottom)), project_cell(Vector2i(left, bottom))])
-    draw_colored_polygon(corners, Color("#27414a"))
+    draw_colored_polygon(corners, Color("#54765b"))
     if lod() == 0 and get_node("Build").panel.visible and (right - left) * (bottom - top) <= MAX_VISIBLE_TILES:
         for x in range(left, right + 1):
             draw_line(project_cell(Vector2i(x, top)), project_cell(Vector2i(x, bottom)), Color("#142a32"), 1.0)

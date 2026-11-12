@@ -8,8 +8,16 @@ const ChunkNode = preload("res://scripts/geo_chunk_node.gd")
 const ATLAS_DIR := "res://data/world/"
 const ATLAS_SCHEMA := "basheco.world_atlas/2"
 const CHUNK_SCHEMA := "basheco.world_chunk/2"
-const BUILDING_SPRITES := [preload("res://assets/kenney/building_45.png"), preload("res://assets/kenney/building_55.png"), preload("res://assets/kenney/building_115.png")]
-const TREE_SPRITE := preload("res://assets/kenney/detail_10.png")
+const BUILDING_SPRITES := [
+    preload("res://assets/kenney/building_45.png"),
+    preload("res://assets/kenney/building_55.png"),
+    preload("res://assets/kenney/building_85.png"),
+    preload("res://assets/kenney/building_115.png")
+]
+const TREE_SPRITES := [
+    preload("res://assets/kenney/detail_10.png"),
+    preload("res://assets/kenney/city_36.png")
+]
 const MAX_BUILDING_SPRITES := 140
 const MAX_TREE_SPRITES := 60
 const MAX_ACTIVE_CHUNKS := 64
@@ -420,8 +428,9 @@ func render_sprites(world: Node2D, canvas: CanvasItem) -> void:
                         if Geometry2D.is_point_in_polygon(local, feature["fill"]):
                             var tree_at: Vector2 = world.project_cell(Vector2i(gx, gy))
                             var tree_width: float = 28.0 * world.zoom_level
+                            var tree_seed := posmod(gx * 17 + gy * 31, TREE_SPRITES.size())
                             decorations.append({
-                                "depth": tree_at.y, "texture": TREE_SPRITE,
+                                "depth": tree_at.y, "texture": TREE_SPRITES[tree_seed],
                                 "rect": Rect2(tree_at.x - tree_width * 0.5, tree_at.y - tree_width, tree_width, tree_width),
                                 "tint": Color.WHITE
                             })

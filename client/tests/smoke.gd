@@ -39,7 +39,7 @@ func _run() -> void:
     check(geo.settlements["ufa"]["rings"].size() >= 1 and geo.settlements["mikhailovka"]["rings"].size() >= 1, "boundaries")
     check(geo.terrain_range["ufa"].x >= 170.0 and geo.terrain_range["ufa"].y <= 185.0, "ufa elevation range")
     check(geo.terrain_range["mikhailovka"].y - geo.terrain_range["mikhailovka"].x > 40.0, "mikhailovka relief")
-    check(geo.BUILDING_SPRITES.size() == 3 and geo.TREE_SPRITE.get_width() > 0, "sprites")
+    check(geo.BUILDING_SPRITES.size() == 4 and geo.TREE_SPRITES.size() == 2 and geo.TREE_SPRITES[0].get_width() > 0, "sprites")
     check(geo.chunk_index.size() == geo.manifest["chunks"].size() and geo.chunk_index.size() > 40, "chunk index")
     check(world.plots.is_empty(), "no invented plots")
 

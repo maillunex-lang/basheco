@@ -41,16 +41,16 @@ func _draw() -> void:
     for feature in features:
         match str(feature["kind"]):
             "farmland":
-                _fill(feature, Color("#a3ad63", 0.24))
+                _fill(feature, Color("#9da96c", 0.43))
                 draw_polyline(feature["pts"], Color("#a3ad63", 0.8), _px(2.0), false)
             "forest":
-                _fill(feature, Color("#36734c", 0.3))
+                _fill(feature, Color("#3e7952", 0.44))
                 draw_polyline(feature["pts"], Color("#4b9164", 0.8), _px(2.0), false)
     for feature in features:
         if str(feature["kind"]) != "water":
             continue
         if str(feature["geom"]) == "polygon":
-            _fill(feature, Color("#327fa8", 0.65))
+            _fill(feature, Color("#368db1", 0.8))
             draw_polyline(feature["pts"], Color("#4a9cc7", 0.9), _px(2.0), false)
         else:
             draw_polyline(feature["pts"], Color("#4a9cc7", 0.9),
@@ -67,7 +67,25 @@ func _draw() -> void:
             if casing:
                 draw_polyline(feature["pts"], Color("#354b52", 0.98), _width(metres + 2.0, 2.2 if minor else 3.4), false)
             else:
-                draw_polyline(feature["pts"], Color("#89958f", 0.98), _width(metres, 1.2 if minor else 2.2), false)
+                draw_polyline(feature["pts"], Color("#8e9695", 0.98), _width(metres, 1.2 if minor else 2.2), false)
+                # Dashed road centre lines are purely visual. OSM geometry
+                # remains untouched, and tiny streets get no false lane markings.
+                if not minor and lod == 0 and metres >= 8.0:
+                    var pts: PackedVector2Array = feature["pts"]
+                    for j in range(pts.size() - 1):
+                        var a: Vector2 = pts[j]
+                        var b: Vector2 = pts[j + 1]
+                        var dist := a.distance_to(b)
+                        if dist <= 0.001:
+                            continue
+                        var dir := (b - a) / dist
+                        var step := _px(11.0)
+                        var dash := _px(4.0)
+                        var cursor := 0.0
+                        while cursor < dist:
+                            var end_at := minf(cursor + dash, dist)
+                            draw_line(a + dir * cursor, a + dir * end_at, Color("#e9dcc1", 0.6), _px(1.1), true)
+                            cursor += step
     if lod <= 1:
         for feature in features:
             if str(feature["kind"]) == "building":
