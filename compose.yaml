@@ -1,0 +1,51 @@
+name: basheco
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: basheco
+      POSTGRES_DB: basheco
+      POSTGRES_PASSWORD: ${BASHECO_DB_PASSWORD:?Set BASHECO_DB_PASSWORD in private .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U basheco -d basheco"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 768m
+    security_opt:
+      - no-new-privileges:true
+  migrate:
+    build: ./server
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://basheco:${BASHECO_DB_PASSWORD:?Set BASHECO_DB_PASSWORD in private .env}@db:5432/basheco
+    command: ["python", "-m", "basheco.migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+  api:
+    build: ./server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4219:8000"
+    environment:
+      DATABASE_URL: postgresql://basheco:${BASHECO_DB_PASSWORD:?Set BASHECO_DB_PASSWORD in private .env}@db:5432/basheco
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  postgres_data:
