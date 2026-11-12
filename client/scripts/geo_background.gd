@@ -65,6 +65,7 @@ func load_world(parent: Node2D) -> void:
         chunk_index[Vector2i(int(entry[0]), int(entry[1]))] = int(entry[2])
     var bounds: Array = manifest.get("navigation_bounds_cells", [0, 0, 0, 0])
     nav_bounds = [int(bounds[0]), int(bounds[1]), int(bounds[2]), int(bounds[3])]
+    _extend_navigation_bounds_from_registry()
     for item in manifest.get("settlements", []):
         var id := str(item["id"])
         var focus := Vector2i(int(item["focus_cell"][0]), int(item["focus_cell"][1]))
@@ -77,6 +78,26 @@ func load_world(parent: Node2D) -> void:
     _load_coverage()
     _load_large()
     ready = true
+
+## The OSM atlas covers only two fragments; navigation covers all confirmed
+## settlement anchors of the republic. Never clamp a valid catalog location to
+## the legacy Ufa/Mikhailovka atlas bounds.
+func _extend_navigation_bounds_from_registry() -> void:
+    var data: Variant = _read_json("res://data/admin_navigation.json")
+    if typeof(data) != TYPE_DICTIONARY or str(data.get("schema", "")) != "basheco.navigation/1":
+        return
+    var margin := 128
+    for district in data.get("districts", []):
+        for settlement in district.get("locations", []):
+            var cell: Variant = settlement.get("cell")
+            if typeof(cell) != TYPE_ARRAY or cell.size() != 2:
+                continue
+            var x := int(cell[0])
+            var y := int(cell[1])
+            nav_bounds[0] = mini(nav_bounds[0], x - margin)
+            nav_bounds[1] = mini(nav_bounds[1], y - margin)
+            nav_bounds[2] = maxi(nav_bounds[2], x + margin)
+            nav_bounds[3] = maxi(nav_bounds[3], y + margin)
 
 func _static_node(anchor: Vector2i, features: Array, node_name: String) -> void:
     var node: Node2D = ChunkNode.new()
