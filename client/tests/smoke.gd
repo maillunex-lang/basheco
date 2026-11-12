@@ -88,10 +88,12 @@ func _run() -> void:
     assert(world.geo_background.spatial_loaded.size() <= world.geo_background.MAX_ACTIVE_CHUNKS)
     assert(world.geo_background.features.size() < world.geo_background.manifest["unique_feature_count"])
     var first_chunk_keys: Array = world.geo_background.spatial_loaded.keys()
-    world.geo_background._refresh_spatial_chunks([-90, -90, -40, -40])
+    var far_bounds: Array[int] = [-90, -90, -40, -40]
+    world.geo_background._refresh_spatial_chunks(far_bounds)
     assert(world.geo_background.spatial_loaded.size() <= world.geo_background.MAX_ACTIVE_CHUNKS)
     assert(world.geo_background.features.size() < world.geo_background.manifest["unique_feature_count"])
-    world.geo_background._refresh_spatial_chunks([100, 120, 160, 180])
+    var near_bounds: Array[int] = [100, 120, 160, 180]
+    world.geo_background._refresh_spatial_chunks(near_bounds)
     assert(world.geo_background.spatial_loaded.size() <= world.geo_background.MAX_ACTIVE_CHUNKS)
     assert(first_chunk_keys.size() > 0)
     assert(world.geo_background.manifest["feature_counts"]["forest"] >= 1)
