@@ -3,7 +3,8 @@ extends CanvasLayer
 var api: Node
 var http: HTTPRequest
 var panel: PanelContainer
-var company: LineEdit
+var company: OptionButton
+var company_ids: Array[String] = []
 var message: Label
 var world: Node2D
 
@@ -22,8 +23,8 @@ func _ready() -> void:
     var title := Label.new()
     title.text = "Строительство и развитие"
     layout.add_child(title)
-    company = LineEdit.new()
-    company.placeholder_text = "UUID своей компании (из раздела Рынок)"
+    company = OptionButton.new()
+    company.add_item("Сначала создайте компанию")
     layout.add_child(company)
     var build := Button.new()
     build.text = "Построить на выбранном участке"
@@ -37,9 +38,19 @@ func _ready() -> void:
     message.text = "Выберите свободный участок на карте"
     layout.add_child(message)
     panel.visible = false
+    world.get_node("Company").companies_updated.connect(_set_companies)
+
+func _set_companies(companies: Array) -> void:
+    company.clear()
+    company_ids.clear()
+    for entry in companies:
+        company.add_item(str(entry.get("name", "Компания")))
+        company_ids.append(str(entry["id"]))
+    if company_ids.is_empty():
+        company.add_item("Сначала создайте компанию")
 
 func _build() -> void:
-    if api.access_token.is_empty() or world.selected_plot < 0:
+    if api.access_token.is_empty() or world.selected_plot < 0 or company_ids.is_empty():
         message.text = "Войдите и выберите участок"
         return
     var plot: Dictionary = world.plots[world.selected_plot]
@@ -47,7 +58,7 @@ func _build() -> void:
         message.text = "Нужен свободный участок с сервера"
         return
     var kind: String = {"commercial":"shop", "industrial":"workshop", "agricultural":"greenhouse"}.get(str(plot["zone"]), "")
-    var payload := JSON.stringify({"company_id":company.text.strip_edges(), "plot_id":str(plot["id"]), "building_type":kind})
+    var payload := JSON.stringify({"company_id":company_ids[company.selected], "plot_id":str(plot["id"]), "building_type":kind})
     var headers := PackedStringArray(["Authorization: Bearer " + api.access_token, "Content-Type: application/json"])
     var err := http.request(api.base_url + "/v1/world/buildings", headers, HTTPClient.METHOD_POST, payload)
     message.text = "Строительство..." if err == OK else "Нет соединения"
