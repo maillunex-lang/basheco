@@ -10,6 +10,10 @@ const MAX_FEATURES := 10000
 const BUILDING_SPRITES := [preload("res://assets/kenney/building_45.png"), preload("res://assets/kenney/building_55.png"), preload("res://assets/kenney/building_115.png")]
 const TREE_SPRITE := preload("res://assets/kenney/detail_10.png")
 const MAX_BUILDING_SPRITES := 140
+const GEOGRAPHY_CHUNK_TILES := 48
+const MAX_ACTIVE_CHUNKS := 48
+var geometry_index: Dictionary = {}
+var active_chunk_ids: Array[Vector2i] = []
 var features: Array = []
 var cached_geometry: Array = []
 var terrain_segments: Array = []
@@ -23,6 +27,8 @@ func load_pilot(location_id: String = "ufa") -> void:
     metres_per_tile = 6.0 if location_id == "mikhailovka" else 4.0
     features.clear()
     cached_geometry.clear()
+    geometry_index.clear()
+    active_chunk_ids.clear()
     terrain_segments.clear()
     terrain_range = Vector2.ZERO
     manifest.clear()
@@ -71,7 +77,21 @@ func load_pilot(location_id: String = "ufa") -> void:
             minimum = minimum.min(tile)
             maximum = maximum.max(tile)
         if tiles.size() >= 2:
+            var feature_index := cached_geometry.size()
             cached_geometry.append({"kind": str(feature.get("kind", "")), "tiles": tiles, "minimum": minimum, "maximum": maximum})
+            var left := floori(minimum.x / GEOGRAPHY_CHUNK_TILES)
+            var top := floori(minimum.y / GEOGRAPHY_CHUNK_TILES)
+            var right := floori(maximum.x / GEOGRAPHY_CHUNK_TILES)
+            var bottom := floori(maximum.y / GEOGRAPHY_CHUNK_TILES)
+            # Guard against malformed huge geometry occupying every chunk.
+            if (right - left + 1) * (bottom - top + 1) > 256:
+                continue
+            for cy in range(top, bottom + 1):
+                for cx in range(left, right + 1):
+                    var key := Vector2i(cx, cy)
+                    if not geometry_index.has(key):
+                        geometry_index[key] = []
+                    geometry_index[key].append(feature_index)
     _load_elevation(location_id)
     ready = true
 
@@ -124,6 +144,32 @@ func _load_elevation(location_id: String) -> void:
                 elif crossings.size() == 4:
                     terrain_segments.append([crossings[0], crossings[1]])
                     terrain_segments.append([crossings[2], crossings[3]])
+
+func tile_extent() -> Rect2:
+    var metres: Array = manifest.get("bounds_m", [])
+    if metres.size() != 4:
+        return Rect2(origin_tile - Vector2(12, 12), Vector2(24, 24))
+    var a := to_tile([float(metres[0]), float(metres[1])])
+    var b := to_tile([float(metres[2]), float(metres[3])])
+    return Rect2(a.min(b), (b - a).abs())
+
+func update_visible_chunks(bounds: Array[int]) -> void:
+    active_chunk_ids.clear()
+    var left := floori(float(bounds[0]) / GEOGRAPHY_CHUNK_TILES) - 1
+    var top := floori(float(bounds[1]) / GEOGRAPHY_CHUNK_TILES) - 1
+    var right := floori(float(bounds[2] - 1) / GEOGRAPHY_CHUNK_TILES) + 1
+    var bottom := floori(float(bounds[3] - 1) / GEOGRAPHY_CHUNK_TILES) + 1
+    var center := Vector2((left + right) * 0.5, (top + bottom) * 0.5)
+    var candidates: Array[Vector2i] = []
+    for cy in range(top, bottom + 1):
+        for cx in range(left, right + 1):
+            var key := Vector2i(cx, cy)
+            if geometry_index.has(key):
+                candidates.append(key)
+    candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+        return Vector2(a).distance_squared_to(center) < Vector2(b).distance_squared_to(center))
+    for i in range(mini(candidates.size(), MAX_ACTIVE_CHUNKS)):
+        active_chunk_ids.append(candidates[i])
 
 func to_tile(point_m: Array) -> Vector2:
     return origin_tile + Vector2(float(point_m[0]), float(point_m[1])) / metres_per_tile
