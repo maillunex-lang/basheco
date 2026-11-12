@@ -101,9 +101,9 @@ func _visible_tile_bounds() -> Array[int]:
     var max_x := 0.0
     var max_y := 0.0
     for corner in [Vector2.ZERO, Vector2(screen.x, 0), Vector2(0, screen.y), screen]:
-        var local := (corner - camera_offset) / zoom_level
-        var tx := local.x / TILE_W + local.y / TILE_H
-        var ty := local.y / TILE_H - local.x / TILE_W
+        var local: Vector2 = (corner - camera_offset) / zoom_level
+        var tx: float = local.x / TILE_W + local.y / TILE_H
+        var ty: float = local.y / TILE_H - local.x / TILE_W
         min_x = minf(min_x, tx)
         min_y = minf(min_y, ty)
         max_x = maxf(max_x, tx)
