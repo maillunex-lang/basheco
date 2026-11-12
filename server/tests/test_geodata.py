@@ -1,5 +1,5 @@
 import unittest
-from basheco.geodata import LocalProjection, clip_segment, clipped_linestring
+from basheco.geodata import LocalProjection, clip_segment, clipped_linestring, clip_polygon
 
 class GeoDataTests(unittest.TestCase):
     def test_origin_and_distance(self):
@@ -28,3 +28,12 @@ class GeoDataTests(unittest.TestCase):
             LocalProjection(400, 55)
         with self.assertRaises(ValueError):
             LocalProjection(55, 55).project(float('nan'), 55)
+
+    def test_polygon_clipping_limits_large_forests(self):
+        result = clip_polygon([(-100,-100),(200,-100),(200,200),(-100,200),(-100,-100)],(0,0,100,100))
+        self.assertGreaterEqual(len(result), 4)
+        self.assertTrue(all(0 <= x <= 100 and 0 <= y <= 100 for x,y in result))
+        self.assertEqual(result[0], result[-1])
+
+    def test_polygon_fully_outside(self):
+        self.assertEqual(clip_polygon([(-10,-10),(-5,-10),(-5,-5),(-10,-10)],(0,0,100,100)), [])
