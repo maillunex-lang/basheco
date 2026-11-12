@@ -252,3 +252,14 @@ def transfer(data: TransferRequest, account_id: str = Depends(current_user)):
         )
         conn.execute("INSERT INTO security_audit(event_type,actor_account_id,subject_id) VALUES(%s,%s,%s)", ("wallet.transfer",account_id,inserted["id"]))
     return {"transfer_id": str(inserted["id"]), "replayed": False}
+
+# Prototype sector is deliberately fictional; do not represent it as an OSM map.
+from basheco.world import ConstructRequest, construct, sector_map
+
+@app.get("/v1/world/sectors/{sector_id}")
+def get_sector(sector_id: str, account_id: str = Depends(current_user)):
+    return sector_map(sector_id)
+
+@app.post("/v1/world/buildings", status_code=201)
+def construct_building(data: ConstructRequest, account_id: str = Depends(current_user)):
+    return construct(data, account_id)
