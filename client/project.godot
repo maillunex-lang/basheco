@@ -1,0 +1,18 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+config/name="BASHECO"
+run/main_scene="res://scenes/world.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+config/description="BASHECO: экономическая MMO Башкортостана"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
