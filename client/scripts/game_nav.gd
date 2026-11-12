@@ -34,7 +34,10 @@ func _ready() -> void:
         button.custom_minimum_size = Vector2(118, 64)
         button.pressed.connect(_show_section.bind(item[2]))
         bar.add_child(button)
-    get_parent().get_node("Economy").panel.visible = false
+    for name in ["Company", "Economy", "Market", "Build"]:
+        var section_panel: PanelContainer = get_parent().get_node(name).panel
+        section_panel.add_theme_stylebox_override("panel", _panel_style())
+        section_panel.visible = false
     get_viewport().size_changed.connect(_layout)
     _layout()
 
@@ -43,7 +46,9 @@ func _panel_style() -> StyleBoxFlat:
     style.bg_color = Color("#142634")
     style.border_color = Color("#2c4654")
     style.border_width_top = 2
-    style.content_margin_top = 7
+    style.content_margin_left = 12
+    style.content_margin_right = 12
+    style.content_margin_top = 10
     style.content_margin_bottom = 7
     return style
 
