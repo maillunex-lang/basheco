@@ -1,8 +1,8 @@
 extends RefCounted
 ## Read-only real-world background. Never turns OSM buildings into playable plots.
 const SOURCES := {
-    "ufa": "res://data/ufa_projected_pilot.json",
-    "mikhailovka": "res://data/mikhailovka_wide/manifest.json"
+    "ufa": "res://data/spatial/ufa/manifest.json",
+    "mikhailovka": "res://data/spatial/mikhailovka/manifest.json"
 }
 var metres_per_tile := 6.0  # Visual pilot only; not a surveyed gameplay scale.
 var origin_tile := Vector2(25.0, 25.0)
@@ -76,6 +76,10 @@ func load_pilot(location_id: String = "ufa") -> void:
     _load_elevation(location_id)
     _load_boundary(location_id)
     ready = true
+    if not spatial_paths.is_empty():
+        var x := int(origin_tile.x)
+        var y := int(origin_tile.y)
+        _refresh_spatial_chunks([x - 30, y - 30, x + 30, y + 30])
 
 func _rebuild_geometry() -> void:
     cached_geometry.clear()
