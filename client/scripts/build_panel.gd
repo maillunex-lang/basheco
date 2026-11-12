@@ -41,16 +41,28 @@ func _ready() -> void:
     world.get_node("Company").companies_updated.connect(_set_companies)
 
 func _set_companies(companies: Array) -> void:
+    var previous := _selected_company_id()
     company.clear()
     company_ids.clear()
+    var selected_index := 0
     for entry in companies:
+        var id := str(entry["id"])
         company.add_item(str(entry.get("name", "Компания")))
-        company_ids.append(str(entry["id"]))
+        company_ids.append(id)
+        if id == previous:
+            selected_index = company_ids.size() - 1
     if company_ids.is_empty():
         company.add_item("Сначала создайте компанию")
+    else:
+        company.select(selected_index)
+
+func _selected_company_id() -> String:
+    if company_ids.is_empty() or company.selected < 0 or company.selected >= company_ids.size():
+        return ""
+    return company_ids[company.selected]
 
 func _build() -> void:
-    if api.access_token.is_empty() or world.selected_plot < 0 or company_ids.is_empty():
+    if api.access_token.is_empty() or world.selected_plot < 0 or _selected_company_id().is_empty():
         message.text = "Войдите и выберите участок"
         return
     var plot: Dictionary = world.plots[world.selected_plot]
@@ -58,7 +70,7 @@ func _build() -> void:
         message.text = "Нужен свободный участок с сервера"
         return
     var kind: String = {"commercial":"shop", "industrial":"workshop", "agricultural":"greenhouse"}.get(str(plot["zone"]), "")
-    var payload := JSON.stringify({"company_id":company_ids[company.selected], "plot_id":str(plot["id"]), "building_type":kind})
+    var payload := JSON.stringify({"company_id":_selected_company_id(), "plot_id":str(plot["id"]), "building_type":kind})
     var headers := PackedStringArray(["Authorization: Bearer " + api.access_token, "Content-Type: application/json"])
     var err := http.request(api.base_url + "/v1/world/buildings", headers, HTTPClient.METHOD_POST, payload)
     message.text = "Строительство..." if err == OK else "Нет соединения"
