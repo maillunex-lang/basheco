@@ -116,7 +116,7 @@ func _login() -> void:
 
 func _on_authenticated() -> void:
     status_label.text = "Вход выполнен"
-    api.load_sector()
+    world.connect_to_server(api.base_url, api.access_token)
     panel.visible = false
     backdrop.visible = false
     get_parent().get_node("Navigation").show()
