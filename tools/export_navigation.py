@@ -37,7 +37,7 @@ def export() -> dict:
             verified = status == "inside_municipality" and isinstance(cell, list) and len(cell) == 2
             locations.append({
                 "id": sid, "name": settlement["name"], "type": settlement["type"],
-                "unit": settlement.get("unit_name", ""),
+                "unit": settlement.get("unit_name") or "",
                 "cell": cell if verified else None,
                 "coordinate_status": status,
             })
