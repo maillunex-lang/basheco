@@ -101,7 +101,7 @@ func _unhandled_input(event: InputEvent) -> void:
         queue_redraw()
     elif event is InputEventMouseMotion and dragging:
         camera_offset += event.relative
-        elif event is InputEventScreenTouch:
+    elif event is InputEventScreenTouch:
         if event.pressed:
             touches[event.index] = event.position
         else:
