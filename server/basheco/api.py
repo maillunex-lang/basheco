@@ -413,3 +413,21 @@ def geography_location_detail(location_id: str):
         ).fetchone()
     return {"location": location, "official_statistics": statistics,
             "npc_simulation": simulation, "simulation_is_not_official_statistics": True}
+
+# Stage 1.3: read-only published generated scenery. Candidate locations are
+# never exposed until explicitly approved and marked published in storage.
+from basheco.generated_storage import published_locations, published_chunk
+
+@app.get("/v1/world/generated/locations")
+def get_generated_locations(account_id: str = Depends(current_user)):
+    return {"locations": published_locations()}
+
+@app.get("/v1/world/generated/{settlement_id}/chunks/{chunk_x}/{chunk_y}")
+def get_generated_chunk(settlement_id: str, chunk_x: int, chunk_y: int,
+                        account_id: str = Depends(current_user)):
+    if not re.fullmatch(r"S[0-9]{11}", settlement_id):
+        raise HTTPException(404, "Location not found")
+    result = published_chunk(settlement_id, chunk_x, chunk_y)
+    if result is None:
+        raise HTTPException(404, "Published chunk not found")
+    return result
