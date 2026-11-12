@@ -61,7 +61,7 @@ func _on_response(_result: int, status: int, _headers: PackedStringArray, body: 
         status_label.text = "Компания создана" if status == 201 else "Ошибка: HTTP " + str(status)
         if status == 201:
             name_field.clear()
-            load_companies()
+            load_companies.call_deferred()
         return
     if status != 200:
         status_label.text = "Ошибка загрузки компаний: HTTP " + str(status)
