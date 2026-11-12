@@ -1,11 +1,13 @@
 extends Node2D
 ## Offline OSM chunk renderer. OSM outlines are NOT ownership parcels.
-const DATA_PATH := "res://data/ufa_center_osm.json"
+const DATA_PATH := "res://data/ufa_chunks/manifest.json"
 const CHUNK_COUNT := 4
 const MAP_TILES := 28.0
 const MARGIN := 2.0
 var features: Array = []
 var chunks: Dictionary = {}
+var chunk_paths: Dictionary = {}
+var loaded_chunks: Dictionary = {}
 var bounds := [55.9710, 54.7377, 55.9730, 54.7395]
 var parent_world: Node2D
 var visible_layer := true
@@ -22,8 +24,9 @@ func _ready() -> void:
     if typeof(data) != TYPE_DICTIONARY or not data.has("features"):
         return
     bounds = data.get("bbox", bounds)
-    features = data["features"]
-    _index_chunks()
+    for chunk in data.get("chunks", []):
+        chunk_paths[Vector2i(int(chunk["x"]), int(chunk["y"]))] = str(chunk["path"])
+    _load_chunk(Vector2i(0, 0))
     attribution = Label.new()
     attribution.text = "© OpenStreetMap contributors · ODbL 1.0 · Уфа"
     attribution.add_theme_font_size_override("font_size", 13)
@@ -33,30 +36,20 @@ func _ready() -> void:
     add_child(attribution)
     queue_redraw()
 
-func _index_chunks() -> void:
-    chunks.clear()
-    for feature in features:
-        var coords: Array = feature.get("coordinates", [])
-        if coords.size() < 2:
-            continue
-        var min_x := CHUNK_COUNT - 1
-        var min_y := CHUNK_COUNT - 1
-        var max_x := 0
-        var max_y := 0
-        for coord in coords:
-            var grid := _geo_to_grid(coord)
-            var cx: int = clampi(int(floor((grid.x - MARGIN) / MAP_TILES * CHUNK_COUNT)), 0, CHUNK_COUNT - 1)
-            var cy: int = clampi(int(floor((grid.y - MARGIN) / MAP_TILES * CHUNK_COUNT)), 0, CHUNK_COUNT - 1)
-            min_x = mini(min_x, cx)
-            max_x = maxi(max_x, cx)
-            min_y = mini(min_y, cy)
-            max_y = maxi(max_y, cy)
-        for cy in range(min_y, max_y + 1):
-            for cx in range(min_x, max_x + 1):
-                var key := Vector2i(cx, cy)
-                if not chunks.has(key):
-                    chunks[key] = []
-                chunks[key].append(feature)
+func _load_chunk(key: Vector2i) -> void:
+    if loaded_chunks.has(key) or not chunk_paths.has(key):
+        return
+    var file := FileAccess.open(chunk_paths[key], FileAccess.READ)
+    if file == null:
+        push_warning("OSM chunk unavailable: " + str(key))
+        return
+    var data: Variant = JSON.parse_string(file.get_as_text())
+    if typeof(data) != TYPE_DICTIONARY:
+        return
+    chunks[key] = data.get("features", [])
+    loaded_chunks[key] = true
+    if features.is_empty():
+        features = chunks[key]
 
 func _geo_to_grid(coord: Array) -> Vector2:
     var mid_lat: float = deg_to_rad((float(bounds[1]) + float(bounds[3])) * 0.5)
@@ -97,10 +90,16 @@ func _chunk_visible(key: Vector2i) -> bool:
 func _draw() -> void:
     if not visible_layer:
         return
-    for key in chunks:
+    var drawn: Dictionary = {}
+    for key in chunk_paths:
         if not _chunk_visible(key):
             continue
-        for feature in chunks[key]:
+        _load_chunk(key)
+        for feature in chunks.get(key, []):
+            var id := str(feature.get("osm_id", ""))
+            if drawn.has(id):
+                continue
+            drawn[id] = true
             var pts := PackedVector2Array()
             for coord in feature.get("coordinates", []):
                 pts.append(_geo_to_screen(coord))
