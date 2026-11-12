@@ -185,7 +185,13 @@ func render(world: Node2D, visible_bounds: Array[int]) -> void:
         world.draw_line(world.project_point(a.x, a.y), world.project_point(b.x, b.y), Color("#91ae86", 0.48), 1.2, true)
     var drawn_buildings := 0
     var drawn_trees := 0
-    for item in cached_geometry:
+    update_visible_chunks(visible_bounds)
+    var visible_features: Dictionary = {}
+    for key in active_chunk_ids:
+        for feature_index in geometry_index[key]:
+            visible_features[feature_index] = true
+    for feature_index in visible_features:
+        var item: Dictionary = cached_geometry[feature_index]
         var kind: String = item["kind"]
         var min_tile: Vector2 = item["minimum"]
         var max_tile: Vector2 = item["maximum"]
