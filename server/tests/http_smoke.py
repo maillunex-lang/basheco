@@ -114,7 +114,7 @@ def main():
                 conn.execute("DELETE FROM company_inventory WHERE company_id IN (SELECT id FROM companies WHERE owner_account_id=ANY(%s::uuid[]))", (ids,))
                 conn.execute("DELETE FROM world_buildings WHERE company_id IN (SELECT id FROM companies WHERE owner_account_id=ANY(%s::uuid[]))", (ids,))
                 conn.execute("UPDATE world_plots SET owner_company_id=NULL WHERE owner_company_id IN (SELECT id FROM companies WHERE owner_account_id=ANY(%s::uuid[]))", (ids,))
-                conn.execute("DELETE FROM wallets WHERE account_id=ANY(%s::uuid[]) OR company_id IN (SELECT id FROM companies WHERE owner_account_id=ANY(%s::uuid[]))", (ids,))
+                conn.execute("DELETE FROM wallets WHERE account_id=ANY(%s::uuid[]) OR company_id IN (SELECT id FROM companies WHERE owner_account_id=ANY(%s::uuid[]))", (ids, ids))
                 conn.execute("DELETE FROM companies WHERE owner_account_id=ANY(%s::uuid[])", (ids,))
                 conn.execute("DELETE FROM sessions WHERE account_id=ANY(%s::uuid[])", (ids,))
                 conn.execute("DELETE FROM accounts WHERE id=ANY(%s::uuid[])", (ids,))
