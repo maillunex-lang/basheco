@@ -1,6 +1,8 @@
 extends Node2D
 ## Isometric prototype, deliberately synthetic. Server remains authoritative.
 const CityChunks = preload("res://scripts/city_chunks.gd")
+const GeoBackground = preload("res://scripts/geo_background.gd")
+var geo_background = GeoBackground.new()
 const INITIAL_GRID_SIZE := 200
 var world_width := INITIAL_GRID_SIZE
 var world_height := INITIAL_GRID_SIZE
@@ -37,6 +39,7 @@ const ZONE_ICONS := {
 var hud: Label
 
 func _ready() -> void:
+    geo_background.load_pilot()
     _focus_on_district()
     hud = Label.new()
     hud.position = Vector2(18, 12)
@@ -132,6 +135,8 @@ func _draw() -> void:
     for y in range(view[1], view[3]):
         for x in range(view[0], view[2]):
             _tile(x, y, Color("#263e42") if (x + y) % 2 == 0 else Color("#294449"))
+    # Geography is a read-only backdrop. Playable parcels always render above it.
+    geo_background.render(self, view)
     for i in range(plots.size()):
         var p: Dictionary = plots[i]
         if not CityChunks.plot_intersects_bounds(p, view):
