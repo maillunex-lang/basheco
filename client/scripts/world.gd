@@ -18,8 +18,10 @@ var plots: Array[Dictionary] = [
     {"tile_x": 2, "tile_y": 20, "width_tiles": 6, "height_tiles": 6, "zone": "agricultural"},
     {"tile_x": 11, "tile_y": 20, "width_tiles": 6, "height_tiles": 6, "zone": "agricultural"}
 ]
-var zoom_level := 0.85
-var camera_offset := Vector2(650, 90)
+var zoom_level := 1.15
+var camera_offset := Vector2.ZERO
+var camera_initialized := false
+var world_visible := false
 var dragging := false
 var touches: Dictionary = {}
 var pinch_distance := 0.0
@@ -32,14 +34,26 @@ const ZONE_ICONS := {
 var hud: Label
 
 func _ready() -> void:
+    _focus_on_district()
     hud = Label.new()
-    hud.position = Vector2(20, 16)
+    hud.position = Vector2(18, 12)
     hud.add_theme_color_override("font_color", Color.WHITE)
     hud.add_theme_font_size_override("font_size", 19)
     add_child(hud)
     _update_hud()
     $API.sector_loaded.connect(_on_sector_loaded)
     $API.request_failed.connect(_on_api_error)
+    get_viewport().size_changed.connect(_on_viewport_resized)
+    queue_redraw()
+
+func _focus_on_district() -> void:
+    var center := iso(12.0, 12.0)
+    camera_offset = get_viewport_rect().size * 0.5 - center * zoom_level
+    camera_initialized = true
+
+func _on_viewport_resized() -> void:
+    if camera_initialized and not world_visible:
+        _focus_on_district()
     queue_redraw()
 
 func connect_to_server(url: String, token: String) -> void:
@@ -56,6 +70,7 @@ func _on_sector_loaded(data: Dictionary) -> void:
             return
         verified.append(item)
     plots = verified
+    world_visible = true
     var sector: Dictionary = data.get("sector", {})
     world_width = maxi(INITIAL_GRID_SIZE, int(sector.get("width_tiles", INITIAL_GRID_SIZE)))
     world_height = maxi(INITIAL_GRID_SIZE, int(sector.get("height_tiles", INITIAL_GRID_SIZE)))
@@ -73,6 +88,8 @@ func project_point(x: float, y: float) -> Vector2:
     return iso(x, y) * zoom_level + camera_offset
 
 func _draw() -> void:
+    if not world_visible:
+        return
     draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color("#121e29"))
     var view := _visible_tile_bounds()
     for y in range(view[1], view[3]):
@@ -129,6 +146,8 @@ func _tile(x: int, y: int, color: Color) -> void:
         Color("#142a32"), 1.0)
 
 func _unhandled_input(event: InputEvent) -> void:
+    if not world_visible or get_node("Login").panel.visible:
+        return
     if event is InputEventMouseButton:
         if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
             zoom_level = minf(2.0, zoom_level * 1.12)
@@ -189,4 +208,4 @@ func _update_hud() -> void:
     if selected_plot >= 0:
         var p: Dictionary = plots[selected_plot]
         suffix = "Участок %d · %s" % [selected_plot + 1, str(p["zone"])]
-    hud.text = "BASHECO | Уфа · карта %d×%d | %s\nЖесты: перемещение и масштаб" % [world_width, world_height, suffix]
+    hud.text = "УФА  /  %s" % suffix
