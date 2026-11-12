@@ -28,6 +28,7 @@ from math import floor, hypot
 from basheco.geodata import LocalProjection
 from basheco.world_grid import CELL_METRES, GRID_VERSION
 from basheco.world_projection import lonlat_to_metres
+from basheco.generated_occupancy import lock_occupancy, generated_overlap
 
 CELL_SOURCE = "legacy_anchor_v1"
 MAX_SNAP_OFFSET_M = CELL_METRES * 2 ** 0.5 / 2 + 0.001
@@ -77,9 +78,10 @@ def load_anchors(conn) -> dict[str, LegacyAnchor]:
 def backfill_plots(conn) -> dict:
     """Place every still-unmapped plot on the world grid. Never moves a mapped plot."""
     from psycopg import errors
+    lock_occupancy(conn)
     anchors = load_anchors(conn)
     rows = conn.execute(
-        "SELECT p.id,p.sector_id,p.tile_x,p.tile_y FROM world_plots p "
+        "SELECT p.id,p.sector_id,p.tile_x,p.tile_y,p.width_tiles,p.height_tiles FROM world_plots p "
         "WHERE p.world_cell_x IS NULL "
         # Owned and built plots first: if two ever collide, player property wins.
         "ORDER BY (p.owner_company_id IS NULL),p.sector_id,p.tile_y,p.tile_x,p.id "
@@ -94,6 +96,9 @@ def backfill_plots(conn) -> dict:
             report["unmapped_no_anchor"].append(str(row["id"]))
             continue
         cell_x, cell_y, offset = legacy_tile_to_world_cell(anchor, row["tile_x"], row["tile_y"])
+        if generated_overlap(conn, cell_x, cell_y, row["width_tiles"], row["height_tiles"]):
+            report["unmapped_conflict"].append(str(row["id"]))
+            continue
         try:
             with conn.transaction():
                 conn.execute(

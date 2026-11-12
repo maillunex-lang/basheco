@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 
 from basheco.location_generator import LIMIT, PILOT, SCHEMA
 from basheco.world_grid import cell_to_chunk
+from basheco.generated_occupancy import lock_occupancy
 
 
 def prepare(bundle: dict) -> list[dict]:
@@ -60,7 +61,7 @@ def import_unpublished(bundle: dict, dry_run: bool = True) -> dict:
         return report
     from basheco.db import connect
     with connect() as conn:
-        conn.execute("SELECT pg_advisory_xact_lock(%s)", (13042026,))
+        lock_occupancy(conn)
         for item in prepared:
             row = conn.execute("SELECT content_hash FROM generated_locations WHERE settlement_id=%s FOR UPDATE", (item["id"],)).fetchone()
             if row:
@@ -104,7 +105,7 @@ def publish_location(settlement_id: str) -> dict:
         raise ValueError("Only the approved pilot may be published in this stage")
     from basheco.db import connect
     with connect() as conn:
-        conn.execute("SELECT pg_advisory_xact_lock(%s)", (13042026,))
+        lock_occupancy(conn)
         location = conn.execute(
             "SELECT published FROM generated_locations WHERE settlement_id=%s FOR UPDATE",
             (settlement_id,),

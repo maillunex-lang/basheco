@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from psycopg import errors
 from pydantic import BaseModel, Field
 from basheco.db import connect
+from basheco.generated_occupancy import lock_occupancy, reject_published_overlap, generated_overlap
 from basheco.world_grid import grid_spec
 from basheco.world_compat import CELL_SOURCE, LegacyAnchor, legacy_tile_to_world_cell
 
@@ -42,6 +43,7 @@ def create_plot(data: NewPlotRequest, account_id: str):
     if data.zone not in ("commercial", "industrial", "agricultural"):
         raise HTTPException(422, "Invalid zone")
     with connect() as conn:
+        lock_occupancy(conn)
         # Lock the sector first to serialize competing overlapping requests.
         sector = conn.execute(
             "SELECT id,width_tiles,height_tiles FROM world_sectors WHERE id=%s FOR UPDATE",
@@ -84,6 +86,7 @@ def create_plot(data: NewPlotRequest, account_id: str):
             raise HTTPException(409, "Settlement is not georeferenced on the world grid")
         cell_x, cell_y, offset = legacy_tile_to_world_cell(
             LegacyAnchor.from_row(anchor_row), data.tile_x, data.tile_y)
+        reject_published_overlap(conn, cell_x, cell_y, 5, 5)
         try:
             with conn.transaction():
                 row = conn.execute(
@@ -191,11 +194,12 @@ def sector_viewport(sector_id: str, min_x: int, min_y: int, max_x: int, max_y: i
 
 
 def grow_district(conn, plot):
-    """Open adjacent prototype parcels after construction, under a sector lock.
+    """Legacy helper: open parcels under the common occupancy lock.
 
     These are game parcels, never OSM/cadastral land. Existing parcels are
     preserved. A fixed sector lock serializes simultaneous builders.
     """
+    lock_occupancy(conn)
     sector = conn.execute(
         "SELECT width_tiles,height_tiles FROM world_sectors WHERE id=%s FOR UPDATE",
         (plot["sector_id"],),
@@ -210,6 +214,13 @@ def grow_district(conn, plot):
     origin_x = (plot["tile_x"] // 8) * 8
     origin_y = (plot["tile_y"] // 8) * 8
     zones = ("commercial", "industrial", "agricultural")
+    anchor_row = conn.execute(
+        "SELECT * FROM world_legacy_sector_anchors WHERE sector_id=%s",
+        (plot["sector_id"],),
+    ).fetchone()
+    if not anchor_row:
+        return 0  # Never create an unplaced parcel around a player building.
+    anchor = LegacyAnchor.from_row(anchor_row)
     for dy in (-2, -1, 0, 1, 2):
         for dx in (-2, -1, 0, 1, 2):
             if dx == 0 and dy == 0:
@@ -228,11 +239,15 @@ def grow_district(conn, plot):
             ).fetchone()
             if overlaps:
                 continue
+            cell_x, cell_y, offset = legacy_tile_to_world_cell(anchor, x, y)
+            if generated_overlap(conn, cell_x, cell_y, 5, 5):
+                continue
             zone = zones[((x // 8) + (y // 8)) % len(zones)]
             conn.execute(
-                "INSERT INTO world_plots(sector_id,tile_x,tile_y,width_tiles,height_tiles,zone,generated_by_growth) "
-                "VALUES(%s,%s,%s,5,5,%s,true)",
-                (plot["sector_id"], x, y, zone),
+                "INSERT INTO world_plots(sector_id,tile_x,tile_y,width_tiles,height_tiles,zone,"
+                "generated_by_growth,world_cell_x,world_cell_y,world_cell_source,world_cell_offset_m) "
+                "VALUES(%s,%s,%s,5,5,%s,true,%s,%s,%s,%s)",
+                (plot["sector_id"], x, y, zone, cell_x, cell_y, CELL_SOURCE, offset),
             )
             created += 1
     return created
