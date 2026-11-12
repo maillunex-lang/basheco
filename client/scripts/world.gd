@@ -1,6 +1,8 @@
 extends Node2D
 ## Isometric prototype, deliberately synthetic. Server remains authoritative.
-const GRID_SIZE := 32
+const INITIAL_GRID_SIZE := 200
+var world_width := INITIAL_GRID_SIZE
+var world_height := INITIAL_GRID_SIZE
 const TILE_W := 64.0
 const TILE_H := 32.0
 const ZONES := {
@@ -54,6 +56,9 @@ func _on_sector_loaded(data: Dictionary) -> void:
             return
         verified.append(item)
     plots = verified
+    var sector: Dictionary = data.get("sector", {})
+    world_width = maxi(INITIAL_GRID_SIZE, int(sector.get("width_tiles", INITIAL_GRID_SIZE)))
+    world_height = maxi(INITIAL_GRID_SIZE, int(sector.get("height_tiles", INITIAL_GRID_SIZE)))
     selected_plot = -1
     _update_hud()
     queue_redraw()
@@ -69,8 +74,9 @@ func project_point(x: float, y: float) -> Vector2:
 
 func _draw() -> void:
     draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color("#121e29"))
-    for y in range(GRID_SIZE):
-        for x in range(GRID_SIZE):
+    var view := _visible_tile_bounds()
+    for y in range(view[1], view[3]):
+        for x in range(view[0], view[2]):
             _tile(x, y, Color("#263e42") if (x + y) % 2 == 0 else Color("#294449"))
     for i in range(plots.size()):
         var p: Dictionary = plots[i]
@@ -87,6 +93,27 @@ func _draw() -> void:
             var icon_size := 44.0 * zoom_level
             draw_texture_rect(icon, Rect2(center - Vector2(icon_size * 0.5, icon_size * 0.8), Vector2(icon_size, icon_size)), false)
         draw_circle(center, 3.0, Color.WHITE)
+
+func _visible_tile_bounds() -> Array[int]:
+    var screen := get_viewport_rect().size
+    var min_x := float(world_width)
+    var min_y := float(world_height)
+    var max_x := 0.0
+    var max_y := 0.0
+    for corner in [Vector2.ZERO, Vector2(screen.x, 0), Vector2(0, screen.y), screen]:
+        var local := (corner - camera_offset) / zoom_level
+        var tx := local.x / TILE_W + local.y / TILE_H
+        var ty := local.y / TILE_H - local.x / TILE_W
+        min_x = minf(min_x, tx)
+        min_y = minf(min_y, ty)
+        max_x = maxf(max_x, tx)
+        max_y = maxf(max_y, ty)
+    return [
+        clampi(int(floor(min_x)) - 2, 0, world_width),
+        clampi(int(floor(min_y)) - 2, 0, world_height),
+        clampi(int(ceil(max_x)) + 3, 0, world_width),
+        clampi(int(ceil(max_y)) + 3, 0, world_height)
+    ]
 
 func _tile(x: int, y: int, color: Color) -> void:
     var corners := PackedVector2Array([
@@ -158,4 +185,4 @@ func _update_hud() -> void:
     if selected_plot >= 0:
         var p: Dictionary = plots[selected_plot]
         suffix = "Участок %d · %s" % [selected_plot + 1, str(p["zone"])]
-    hud.text = "BASHECO  |  Уфа · тестовый квартал  |  %s\nКолесо: масштаб · Средняя кнопка: перемещение" % suffix
+    hud.text = "BASHECO | Уфа · карта %d×%d | %s\nЖесты: перемещение и масштаб" % [world_width, world_height, suffix]
