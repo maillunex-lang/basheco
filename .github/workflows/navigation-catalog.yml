@@ -6,6 +6,8 @@ on:
     paths:
       - 'server/geodata/admin/**'
       - 'tools/export_navigation.py'
+      - 'server/tests/test_navigation_catalog.py'
+      - '.github/workflows/navigation-catalog.yml'
 permissions:
   contents: write
 jobs:
@@ -20,6 +22,8 @@ jobs:
           python-version: '3.12'
       - name: Generate catalog
         run: python tools/export_navigation.py
+      - name: Validate catalog integrity
+        run: python -m unittest discover -s server/tests -p test_navigation_catalog.py -v
       - name: Commit generated catalog if changed
         run: |
           git config user.name "github-actions[bot]"
