@@ -116,9 +116,13 @@ func _on_sector_loaded(data: Dictionary) -> void:
         plots = verified
     world_visible = true
     var sector: Dictionary = data.get("sector", {})
-    world_width = maxi(INITIAL_GRID_SIZE, int(sector.get("width_tiles", INITIAL_GRID_SIZE)))
-    world_height = maxi(INITIAL_GRID_SIZE, int(sector.get("height_tiles", INITIAL_GRID_SIZE)))
-    ufa_saved_size = Vector2i(world_width, world_height)
+    ufa_saved_size = Vector2i(
+        maxi(INITIAL_GRID_SIZE, int(sector.get("width_tiles", INITIAL_GRID_SIZE))),
+        maxi(INITIAL_GRID_SIZE, int(sector.get("height_tiles", INITIAL_GRID_SIZE)))
+    )
+    if current_location_id == "ufa":
+        world_width = ufa_saved_size.x
+        world_height = ufa_saved_size.y
     selected_plot = -1
     _update_hud()
     _camera_changed()
