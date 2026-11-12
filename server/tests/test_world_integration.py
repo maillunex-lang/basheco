@@ -5,7 +5,7 @@ from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import HTTPException
 from basheco.db import connect
-from basheco.world import ConstructRequest, construct, sector_map, sector_viewport
+from basheco.world import ConstructRequest, construct, sector_map, sector_viewport, NewPlotRequest, create_plot
 from basheco.migrate import main as migrate
 
 @unittest.skipUnless(os.environ.get("BASHECO_TEST_DATABASE_URL"), "Disposable test database required")
@@ -66,6 +66,28 @@ class WorldTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             sector_viewport("ufa", 0, 0, 1000, 1000)
         self.assertEqual(ctx.exception.status_code, 422)
+
+    def test_new_parcel_overlap_and_quota(self):
+        created = []
+        try:
+            for x in (200, 210, 220):
+                row = create_plot(NewPlotRequest(sector_id="ufa", tile_x=x,
+                                                  tile_y=200, zone="industrial"),
+                                  str(self.accounts[0]))
+                created.append(row["plot_id"])
+            with self.assertRaises(HTTPException) as overlap:
+                create_plot(NewPlotRequest(sector_id="ufa", tile_x=202,
+                                           tile_y=200, zone="industrial"),
+                            str(self.accounts[1]))
+            self.assertEqual(overlap.exception.status_code, 409)
+            with self.assertRaises(HTTPException) as quota:
+                create_plot(NewPlotRequest(sector_id="ufa", tile_x=230,
+                                           tile_y=200, zone="industrial"),
+                            str(self.accounts[0]))
+            self.assertEqual(quota.exception.status_code, 409)
+        finally:
+            with connect() as conn:
+                conn.execute("DELETE FROM world_plots WHERE id=ANY(%s::uuid[])", (created,))
 
     def test_building_and_double_claim(self):
         result=construct(self.req(),str(self.accounts[0]))
