@@ -14,6 +14,10 @@ def main():
                     conn.execute("INSERT INTO schema_migrations (version) VALUES (%s)", (f.name,))
                     print("Applied migration", f.name, flush=True)
     print("Migrations complete", flush=True)
+    # Stage 1: place plots that predate the world grid (idempotent, additive).
+    # Plots that cannot be placed safely stay unmapped and are listed in the report.
+    from basheco.world_compat import main as backfill_world_cells
+    backfill_world_cells()
 
 if __name__ == "__main__":
     main()

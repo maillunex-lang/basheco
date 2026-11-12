@@ -310,8 +310,21 @@ def transfer(data: TransferRequest, account_id: str = Depends(current_user)):
         conn.execute("INSERT INTO security_audit(event_type,actor_account_id,subject_id) VALUES(%s,%s,%s)", ("wallet.transfer",account_id,inserted["id"]))
     return {"transfer_id": str(inserted["id"]), "replayed": False}
 
-# Prototype sector is deliberately fictional; do not represent it as an OSM map.
-from basheco.world import ConstructRequest, construct, sector_map, sector_viewport, NewPlotRequest, create_plot
+# World: one grid for every settlement. Legacy sector endpoints stay for compatibility.
+from basheco.world import (ConstructRequest, construct, sector_map, sector_viewport, NewPlotRequest,
+                           create_plot, world_viewport as global_world_viewport, world_grid_info)
+
+@app.get("/v1/world/grid")
+def get_world_grid():
+    """Single world grid contract (EPSG:32640, 6 m cells, 64x64 chunks)."""
+    return world_grid_info()
+
+
+@app.get("/v1/world/viewport")
+def get_world_viewport(min_cell_x: int, min_cell_y: int, max_cell_x: int, max_cell_y: int,
+                       account_id: str = Depends(current_user)):
+    """Parcels of every settlement inside a rectangle of global world cells."""
+    return global_world_viewport(min_cell_x, min_cell_y, max_cell_x, max_cell_y)
 
 @app.post("/v1/world/plots")
 def provision_world_plot(data: NewPlotRequest, account_id: str = Depends(current_user)):

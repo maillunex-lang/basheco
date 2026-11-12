@@ -5,8 +5,19 @@ Production land acquisition will require a separate economic transaction.
 """
 from uuid import UUID
 from fastapi import HTTPException
+from psycopg import errors
 from pydantic import BaseModel, Field
 from basheco.db import connect
+from basheco.world_grid import grid_spec
+from basheco.world_compat import CELL_SOURCE, LegacyAnchor, legacy_tile_to_world_cell
+
+MAX_VIEWPORT_CELLS = 512
+_PLOT_COLUMNS = (
+    "p.id,p.sector_id,p.tile_x,p.tile_y,p.width_tiles,p.height_tiles,p.zone,"
+    "p.owner_company_id,p.world_cell_x,p.world_cell_y,"
+    "b.id AS building_id,b.building_type "
+    "FROM world_plots p LEFT JOIN world_buildings b ON b.plot_id=p.id "
+)
 
 class ConstructRequest(BaseModel):
     company_id: UUID
@@ -63,13 +74,74 @@ def create_plot(data: NewPlotRequest, account_id: str):
         ).fetchone()
         if overlap:
             raise HTTPException(409, "Parcel overlaps an existing parcel")
-        row = conn.execute(
-            "INSERT INTO world_plots(sector_id,tile_x,tile_y,width_tiles,height_tiles,zone,generated_by_growth,created_by_account_id) "
-            "VALUES(%s,%s,%s,5,5,%s,true,%s) RETURNING id",
-            (data.sector_id, data.tile_x, data.tile_y, data.zone, account_id),
+        # The request still uses legacy settlement coordinates (API unchanged), but the
+        # parcel is stored with its position on the single world grid. The exclusion
+        # constraint rejects any overlap with parcels of every settlement.
+        anchor_row = conn.execute(
+            "SELECT * FROM world_legacy_sector_anchors WHERE sector_id=%s", (data.sector_id,),
         ).fetchone()
+        if not anchor_row:
+            raise HTTPException(409, "Settlement is not georeferenced on the world grid")
+        cell_x, cell_y, offset = legacy_tile_to_world_cell(
+            LegacyAnchor.from_row(anchor_row), data.tile_x, data.tile_y)
+        try:
+            with conn.transaction():
+                row = conn.execute(
+                    "INSERT INTO world_plots(sector_id,tile_x,tile_y,width_tiles,height_tiles,zone,"
+                    "generated_by_growth,created_by_account_id,"
+                    "world_cell_x,world_cell_y,world_cell_source,world_cell_offset_m) "
+                    "VALUES(%s,%s,%s,5,5,%s,true,%s,%s,%s,%s,%s) RETURNING id",
+                    (data.sector_id, data.tile_x, data.tile_y, data.zone, account_id,
+                     cell_x, cell_y, CELL_SOURCE, offset),
+                ).fetchone()
+        except errors.ExclusionViolation:
+            raise HTTPException(409, "Parcel overlaps an existing parcel")
         return {"plot_id": str(row["id"]), "sector_id": data.sector_id,
-                "tile_x": data.tile_x, "tile_y": data.tile_y, "zone": data.zone}
+                "tile_x": data.tile_x, "tile_y": data.tile_y, "zone": data.zone,
+                "world_cell_x": cell_x, "world_cell_y": cell_y}
+
+
+def world_viewport(min_cell_x: int, min_cell_y: int, max_cell_x: int, max_cell_y: int):
+    """Parcels of ALL settlements intersecting a rectangle of global world cells.
+
+    Half-open rectangle [min, max). Coordinates may be negative. Parcels that
+    are not placed on the world grid yet are never returned here; their number
+    is reported so that a client cannot mistake them for empty land.
+    """
+    limit = 2 ** 40
+    if not all(-limit <= v <= limit for v in (min_cell_x, min_cell_y, max_cell_x, max_cell_y)):
+        raise HTTPException(422, "Invalid viewport")
+    if max_cell_x <= min_cell_x or max_cell_y <= min_cell_y:
+        raise HTTPException(422, "Invalid viewport")
+    if max_cell_x - min_cell_x > MAX_VIEWPORT_CELLS or max_cell_y - min_cell_y > MAX_VIEWPORT_CELLS:
+        raise HTTPException(422, "Viewport too large")
+    with connect() as conn:
+        plots = conn.execute(
+            "SELECT " + _PLOT_COLUMNS +
+            "WHERE p.world_cell_x IS NOT NULL "
+            "AND int8range(p.world_cell_x, p.world_cell_x + p.width_tiles) && int8range(%s,%s) "
+            "AND int8range(p.world_cell_y, p.world_cell_y + p.height_tiles) && int8range(%s,%s) "
+            "ORDER BY p.world_cell_y,p.world_cell_x,p.id LIMIT 2001",
+            (min_cell_x, max_cell_x, min_cell_y, max_cell_y),
+        ).fetchall()
+        if len(plots) > 2000:
+            raise HTTPException(413, "Viewport plot count exceeds limit")
+        unplaced = conn.execute(
+            "SELECT count(*) AS n FROM world_plots WHERE world_cell_x IS NULL").fetchone()["n"]
+    return {"grid": grid_spec(), "plots": plots, "unplaced_plot_count": unplaced,
+            "viewport": {"min_cell_x": min_cell_x, "min_cell_y": min_cell_y,
+                         "max_cell_x": max_cell_x, "max_cell_y": max_cell_y}}
+
+
+def world_grid_info():
+    """Authoritative grid contract and the documented legacy sector anchors."""
+    with connect() as conn:
+        anchors = conn.execute(
+            "SELECT sector_id,origin_lon,origin_lat,origin_tile_x,origin_tile_y,"
+            "metres_per_tile,projection FROM world_legacy_sector_anchors ORDER BY sector_id"
+        ).fetchall()
+    return {"grid": grid_spec(), "legacy_sector_anchors": anchors,
+            "legacy_note": "sector tile_x/tile_y are historical local indices, not world cells"}
 
 
 def sector_map(sector_id: str):
@@ -81,9 +153,7 @@ def sector_map(sector_id: str):
         if sector is None:
             raise HTTPException(404, "Sector not found")
         plots = conn.execute(
-            "SELECT p.id,p.tile_x,p.tile_y,p.width_tiles,p.height_tiles,p.zone,"
-            "p.owner_company_id,b.id AS building_id,b.building_type "
-            "FROM world_plots p LEFT JOIN world_buildings b ON b.plot_id=p.id "
+            "SELECT " + _PLOT_COLUMNS +
             "WHERE p.sector_id=%s ORDER BY p.tile_y,p.tile_x", (sector_id,),
         ).fetchall()
         return {"sector": sector, "plots": plots}
@@ -106,9 +176,7 @@ def sector_viewport(sector_id: str, min_x: int, min_y: int, max_x: int, max_y: i
         if sector is None:
             raise HTTPException(404, "Sector not found")
         plots = conn.execute(
-            "SELECT p.id,p.tile_x,p.tile_y,p.width_tiles,p.height_tiles,p.zone,"
-            "p.owner_company_id,b.id AS building_id,b.building_type "
-            "FROM world_plots p LEFT JOIN world_buildings b ON b.plot_id=p.id "
+            "SELECT " + _PLOT_COLUMNS +
             "WHERE p.sector_id=%s "
             "AND p.tile_x < %s AND p.tile_x + p.width_tiles > %s "
             "AND p.tile_y < %s AND p.tile_y + p.height_tiles > %s "

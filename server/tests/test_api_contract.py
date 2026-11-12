@@ -46,3 +46,28 @@ class ProxyIdentityTests(unittest.TestCase):
         with patch.dict("os.environ",{"BASHECO_PROXY_SECRET":"real"},clear=False):
             self.assertEqual(client_identity(req("203.0.113.8")),"203.0.113.8")
             self.assertEqual(client_identity(req("bad,ip")),"172.18.0.1")
+
+
+@unittest.skipIf(RegisterRequest is None, "API requirements not installed")
+class WorldRouteContractTests(unittest.TestCase):
+    def test_existing_world_routes_are_kept_and_global_ones_added(self):
+        from basheco.api import app
+        routes = {(sorted(r.methods - {"HEAD"})[0], r.path) for r in app.routes if hasattr(r, "methods")}
+        for route in (("POST", "/v1/world/plots"), ("GET", "/v1/world/sectors/{sector_id}/viewport"),
+                      ("GET", "/v1/world/sectors/{sector_id}"), ("POST", "/v1/world/buildings"),
+                      ("GET", "/v1/geography/locations"), ("GET", "/v1/economy/catalog"),
+                      ("GET", "/v1/market/listings"),
+                      ("GET", "/v1/world/grid"), ("GET", "/v1/world/viewport")):
+            self.assertIn(route, routes)
+
+    def test_global_viewport_requires_a_session(self):
+        try:
+            from starlette.testclient import TestClient
+        except Exception:  # httpx not installed in the runtime image
+            self.skipTest("HTTP test client unavailable")
+        from basheco.api import app
+        client = TestClient(app)
+        query = "?min_cell_x=0&min_cell_y=0&max_cell_x=10&max_cell_y=10"
+        self.assertEqual(client.get("/v1/world/viewport" + query).status_code, 401)
+        self.assertEqual(client.get("/v1/world/viewport" + query,
+                                    headers={"Authorization": "Bearer nope"}).status_code, 401)
