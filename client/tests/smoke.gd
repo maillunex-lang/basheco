@@ -22,6 +22,12 @@ func _run() -> void:
     assert(osm.attribution.text.contains("OpenStreetMap"))
     assert(world.get_node("API") != null)
     assert(world.get_node("Login") != null)
+    var build_panel = world.get_node("Build")
+    assert(build_panel.company_ids.is_empty())
+    build_panel._set_companies([{"id":"test-company-1", "name":"Тестовая компания"}])
+    assert(build_panel.company_ids.size() == 1)
+    assert(build_panel.company.get_item_text(0) == "Тестовая компания")
+    assert(world.get_node("Login").display_name != null)
     var p: Dictionary = world.plots[0]
     var center: Vector2 = world.project_point(
         float(p["tile_x"]) + float(p["width_tiles"]) / 2.0,
