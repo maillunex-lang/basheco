@@ -1,6 +1,12 @@
 # BASHECO roadmap
 
-## Current approved sequential plan (12 November 2026)
+## Current approved Alpha First priority (12 November 2026)
+
+The current priority is the playable Android closed alpha, defined in
+[ALPHA_FIRST_PLAN.md](ALPHA_FIRST_PLAN.md). The previous sequential plan below
+is retained as historical scope, **not** as a gate preventing alpha work.
+
+## Historical sequential plan (12 November 2026)
 
 The order below governs **new work**. Older implementation notes further down
 this file are historical and do not authorize starting another mechanic early.
