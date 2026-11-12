@@ -1,5 +1,6 @@
 extends Node2D
 ## Isometric prototype, deliberately synthetic. Server remains authoritative.
+const CityChunks = preload("res://scripts/city_chunks.gd")
 const INITIAL_GRID_SIZE := 200
 var world_width := INITIAL_GRID_SIZE
 var world_height := INITIAL_GRID_SIZE
@@ -127,11 +128,14 @@ func _draw() -> void:
         return
     draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color("#121e29"))
     var view := _visible_tile_bounds()
+    # World coordinates remain continuous; only on-screen tiles are rendered.
     for y in range(view[1], view[3]):
         for x in range(view[0], view[2]):
             _tile(x, y, Color("#263e42") if (x + y) % 2 == 0 else Color("#294449"))
     for i in range(plots.size()):
         var p: Dictionary = plots[i]
+        if not CityChunks.plot_intersects_bounds(p, view):
+            continue
         var px := int(p["tile_x"])
         var py := int(p["tile_y"])
         if px >= view[2] or py >= view[3] or px + int(p["width_tiles"]) <= view[0] or py + int(p["height_tiles"]) <= view[1]:
