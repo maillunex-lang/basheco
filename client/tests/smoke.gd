@@ -9,7 +9,13 @@ func _run() -> void:
     root.add_child(world)
     await process_frame
     assert(world.plots.size() == 6)
-    assert(world.get_node("OSM").features.size() >= 1)
+    var osm = world.get_node("OSM")
+    assert(osm.features.size() >= 1)
+    assert(osm.chunk_paths.size() == 16)
+    assert(osm.loaded_chunks.size() == 1)
+    osm._load_chunk(Vector2i(1, 1))
+    assert(osm.loaded_chunks.size() == 2)
+    assert(osm.attribution.text.contains("OpenStreetMap"))
     assert(world.get_node("API") != null)
     assert(world.get_node("Login") != null)
     var p: Dictionary = world.plots[0]
