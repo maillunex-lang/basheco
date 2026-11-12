@@ -71,6 +71,7 @@ func _ready() -> void:
     layout.add_child(info)
     api.authenticated.connect(refresh_listings)
     panel.visible = false
+    api.authenticated.connect(load_companies)
 
 func _caption(value: String) -> Label:
     var label := Label.new()
@@ -92,6 +93,9 @@ func _request(kind: String, path: String, method: int = HTTPClient.METHOD_GET, p
     if err != OK:
         busy = false
         info.text = "Нет соединения"
+
+func load_companies() -> void:
+    _request("companies", "/v1/companies")
 
 func refresh_listings() -> void:
     panel.visible = true
@@ -133,7 +137,12 @@ func _on_response(_result: int, status: int, _headers_result: PackedStringArray,
     if status < 200 or status >= 300 or typeof(parsed) != TYPE_DICTIONARY:
         info.text = "Ошибка рынка: HTTP " + str(status)
         return
-    if pending == "list":
+    if pending == "companies":
+        var companies: Array = parsed.get("companies", [])
+        if companies.size() > 0:
+            company_field.text = str(companies[0]["id"])
+        info.text = "Компаний: " + str(companies.size())
+    elif pending == "list":
         listings = parsed.get("listings", [])
         listing_selector.clear()
         for listing in listings:
