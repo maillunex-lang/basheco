@@ -1,6 +1,9 @@
 extends RefCounted
 ## Read-only real-world background. Never turns OSM buildings into playable plots.
-const SOURCE := "res://data/ufa_projected_pilot.json"
+const SOURCES := {
+    "ufa": "res://data/ufa_projected_pilot.json",
+    "mikhailovka": "res://data/mikhailovka_projected_pilot.json"
+}
 const METRES_PER_TILE := 4.0  # Visual pilot only; not a surveyed gameplay scale.
 const ORIGIN_TILE := Vector2(25.0, 25.0)
 const MAX_FEATURES := 10000
@@ -8,14 +11,21 @@ var features: Array = []
 var manifest: Dictionary = {}
 var ready := false
 
-func load_pilot() -> void:
-    var file := FileAccess.open(SOURCE, FileAccess.READ)
+func load_pilot(location_id: String = "ufa") -> void:
+    ready = false
+    features.clear()
+    manifest.clear()
+    if not SOURCES.has(location_id):
+        return
+    var file := FileAccess.open(SOURCES[location_id], FileAccess.READ)
     if file == null:
         return
     var data: Variant = JSON.parse_string(file.get_as_text())
     if typeof(data) != TYPE_DICTIONARY:
         return
     manifest = data.get("manifest", {})
+    if str(manifest.get("location_id", "")) != location_id:
+        return
     if str(manifest.get("projection", "")) != "local_equirectangular_metres":
         return
     features = data.get("features", [])
