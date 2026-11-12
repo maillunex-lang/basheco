@@ -113,9 +113,10 @@ class MarketTests(unittest.TestCase):
             buy(lid,BuyRequest(company_id=self.companies[1],quantity=1,
                               idempotency_key="foreign-test-123"),str(self.accounts[0]))
         self.assertEqual(ctx.exception.status_code,403)
+        with connect() as conn:
+            conn.execute("UPDATE wallets SET balance_kopecks=0 WHERE id=%s",(self.wallets[1],))
         with self.assertRaises(HTTPException) as ctx:
             self.purchase(lid,"expensive-test",quantity=10)
-        # 10 * 100 = 1000, so this succeeds; use insufficient funds separately.
         self.assertEqual(ctx.exception.status_code,409)
 
     def test_parallel_buy_single_inventory(self):
