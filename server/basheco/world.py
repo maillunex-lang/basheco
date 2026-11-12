@@ -49,8 +49,8 @@ def grow_district(conn, plot):
     origin_x = (plot["tile_x"] // 8) * 8
     origin_y = (plot["tile_y"] // 8) * 8
     zones = ("commercial", "industrial", "agricultural")
-    for dy in (-1, 0, 1):
-        for dx in (-1, 0, 1):
+    for dy in (-2, -1, 0, 1, 2):
+        for dx in (-2, -1, 0, 1, 2):
             if dx == 0 and dy == 0:
                 continue
             x = origin_x + dx * 8
