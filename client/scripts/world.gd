@@ -10,6 +10,8 @@ const CityChunks = preload("res://scripts/city_chunks.gd")
 const GeoBackground = preload("res://scripts/geo_background.gd")
 const WorldGrid = preload("res://scripts/world_grid.gd")
 const WorldOverlay = preload("res://scripts/world_overlay.gd")
+const GENERATED := "res://data/generated_locations.json"
+var generated_objects: Array[Dictionary] = []
 var geo_background = GeoBackground.new()
 const DEFAULT_SETTLEMENT := "ufa"
 var current_location_id := DEFAULT_SETTLEMENT
@@ -60,6 +62,13 @@ const ZONE_ICONS := {
 var hud: Label
 
 func _ready() -> void:
+    var generated_file := FileAccess.open(GENERATED, FileAccess.READ)
+    if generated_file != null:
+        var data: Variant = JSON.parse_string(generated_file.get_as_text())
+        if typeof(data) == TYPE_DICTIONARY and data.get("schema", "") == "basheco.generated_locations/1":
+            for location in data.get("locations", []):
+                for obj in location.get("objects", []):
+                    generated_objects.append(obj)
     geo_background.load_world(self)
     overlay = WorldOverlay.new()
     overlay.name = "Overlay"
@@ -354,6 +363,24 @@ func draw_overlay(canvas: CanvasItem) -> void:
         return
     var view := visible_cell_bounds()
     geo_background.render_sprites(self, canvas)
+    # Stage 1.3 pilot: deterministic visual-only buildings and roads.
+    # This layer is NOT player property and is not written to the game database.
+    if lod() <= 1:
+        for obj in generated_objects:
+            var cell_data: Array = obj["cell"]
+            var size_data: Array = obj["size"]
+            var cell := Vector2i(int(cell_data[0]), int(cell_data[1]))
+            var footprint := Vector2i(int(size_data[0]), int(size_data[1]))
+            if cell.x + footprint.x < view[0] or cell.x > view[2] or cell.y + footprint.y < view[1] or cell.y > view[3]:
+                continue
+            var corners := PackedVector2Array([
+                project_cell(cell), project_cell(cell + Vector2i(footprint.x, 0)),
+                project_cell(cell + footprint), project_cell(cell + Vector2i(0, footprint.y))
+            ])
+            var color := Color("#53616b") if str(obj["kind"]) == "road" else Color("#d7a76e")
+            canvas.draw_colored_polygon(corners, color)
+            if str(obj["kind"]) == "house":
+                canvas.draw_polyline(PackedVector2Array([corners[0], corners[1], corners[2], corners[3], corners[0]]), Color("#fff0cb"), 2.0)
     # Playable parcels always render above the read-only geography.
     if lod() <= 2:
         for i in range(plots.size()):
