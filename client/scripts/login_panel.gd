@@ -38,6 +38,11 @@ func _ready() -> void:
     button.custom_minimum_size.y = 48
     button.pressed.connect(_login)
     layout.add_child(button)
+    var demo_button := Button.new()
+    demo_button.text = "Посмотреть карту без входа"
+    demo_button.custom_minimum_size.y = 48
+    demo_button.pressed.connect(func(): panel.visible = false)
+    layout.add_child(demo_button)
     status_label = Label.new()
     status_label.text = "Для доступа необходима учётная запись"
     layout.add_child(status_label)
