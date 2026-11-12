@@ -70,7 +70,7 @@ func _process(delta: float) -> void:
     performance_elapsed = 0.0
     var fps := Performance.get_monitor(Performance.TIME_FPS)
     var memory_mb := Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0
-    var active := world.geo_background.active_chunk_ids.size()
+    var active: int = world.geo_background.active_chunk_ids.size()
     performance_label.text = "FPS: %d  |  Godot RAM: %.1f MB  |  чанков: %d  |  масштаб: %.2f×" % [int(fps), memory_mb, active, world.zoom_level]
 
 func _surface() -> StyleBoxFlat:
