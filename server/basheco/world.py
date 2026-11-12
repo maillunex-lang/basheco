@@ -29,6 +29,54 @@ def sector_map(sector_id: str):
         ).fetchall()
         return {"sector": sector, "plots": plots}
 
+def grow_district(conn, plot):
+    """Open adjacent prototype parcels after construction, under a sector lock.
+
+    These are game parcels, never OSM/cadastral land. Existing parcels are
+    preserved. A fixed sector lock serializes simultaneous builders.
+    """
+    sector = conn.execute(
+        "SELECT width_tiles,height_tiles FROM world_sectors WHERE id=%s FOR UPDATE",
+        (plot["sector_id"],),
+    ).fetchone()
+    count = conn.execute(
+        "SELECT count(*) AS n FROM world_plots WHERE sector_id=%s",
+        (plot["sector_id"],),
+    ).fetchone()["n"]
+    if count >= 2000:
+        return 0
+    created = 0
+    origin_x = (plot["tile_x"] // 8) * 8
+    origin_y = (plot["tile_y"] // 8) * 8
+    zones = ("commercial", "industrial", "agricultural")
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            x = origin_x + dx * 8
+            y = origin_y + dy * 8
+            if x < 0 or y < 0 or x + 5 > sector["width_tiles"] or y + 5 > sector["height_tiles"]:
+                continue
+            if count + created >= 2000:
+                return created
+            overlaps = conn.execute(
+                "SELECT 1 FROM world_plots WHERE sector_id=%s "
+                "AND tile_x < %s AND tile_x + width_tiles > %s "
+                "AND tile_y < %s AND tile_y + height_tiles > %s LIMIT 1",
+                (plot["sector_id"], x + 5, x, y + 5, y),
+            ).fetchone()
+            if overlaps:
+                continue
+            zone = zones[((x // 8) + (y // 8)) % len(zones)]
+            conn.execute(
+                "INSERT INTO world_plots(sector_id,tile_x,tile_y,width_tiles,height_tiles,zone,generated_by_growth) "
+                "VALUES(%s,%s,%s,5,5,%s,true)",
+                (plot["sector_id"], x, y, zone),
+            )
+            created += 1
+    return created
+
+
 def construct(data: ConstructRequest, account_id: str):
     with connect() as conn:
         company = conn.execute(
@@ -78,5 +126,6 @@ def construct(data: ConstructRequest, account_id: str):
              plot["tile_x"] + plot["width_tiles"],
              plot["tile_y"] + plot["height_tiles"]),
         )
-        return {"building_id": str(building["id"]), "plot_id": str(data.plot_id),
+        new_plots = grow_district(conn, plot)
+        return {"new_plots": new_plots, "building_id": str(building["id"]), "plot_id": str(data.plot_id),
                 "company_id": str(data.company_id), "building_type": data.building_type}
