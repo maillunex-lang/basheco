@@ -22,6 +22,11 @@ var dragging := false
 var touches: Dictionary = {}
 var pinch_distance := 0.0
 var selected_plot := -1
+const ZONE_ICONS := {
+    "commercial": preload("res://assets/icons/shop.svg"),
+    "industrial": preload("res://assets/icons/workshop.svg"),
+    "agricultural": preload("res://assets/icons/greenhouse.svg")
+}
 var hud: Label
 
 func _ready() -> void:
@@ -77,7 +82,11 @@ func _draw() -> void:
                 _tile(int(p["tile_x"]) + dx, int(p["tile_y"]) + dy, color)
         var center := project_point(float(p["tile_x"]) + float(p["width_tiles"]) / 2.0,
             float(p["tile_y"]) + float(p["height_tiles"]) / 2.0)
-        draw_circle(center, 5.0, Color.WHITE)
+        var icon: Texture2D = ZONE_ICONS.get(str(p["zone"]))
+        if icon != null:
+            var icon_size := 44.0 * zoom_level
+            draw_texture_rect(icon, Rect2(center - Vector2(icon_size * 0.5, icon_size * 0.8), Vector2(icon_size, icon_size)), false)
+        draw_circle(center, 3.0, Color.WHITE)
 
 func _tile(x: int, y: int, color: Color) -> void:
     var corners := PackedVector2Array([
