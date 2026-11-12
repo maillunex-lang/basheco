@@ -228,6 +228,8 @@ func _run() -> void:
     check(hud.company_label.text == "Компания не выбрана", "hud company placeholder")
     hud._companies_updated([{"name": "Тестовая компания"}])
     check(hud.company_label.text == "Тестовая компания", "hud company")
+    check(hud.balance_label.text == "Баланс: нет данных", "hud does not fabricate funds")
+    check(hud.location_button != null and hud.location_button.tooltip_text.contains("населённый пункт"), "hud location picker available")
     check(hud.district_label.text.begins_with("УФА"), "hud shows the settlement under the camera: " + hud.district_label.text)
     var nav_panel = world.get_node("Navigation")
     nav_panel._show_section("Build")
