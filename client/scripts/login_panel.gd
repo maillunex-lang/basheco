@@ -71,6 +71,7 @@ func _preview_map() -> void:
     backdrop.visible = false
     get_parent().world_visible = true
     get_parent().get_node("Navigation").show()
+    get_parent().get_node("HUD").show()
     get_parent().queue_redraw()
 
 var registration_http: HTTPRequest
