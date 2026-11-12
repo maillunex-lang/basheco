@@ -263,3 +263,17 @@ def get_sector(sector_id: str, account_id: str = Depends(current_user)):
 @app.post("/v1/world/buildings", status_code=201)
 def construct_building(data: ConstructRequest, account_id: str = Depends(current_user)):
     return construct(data, account_id)
+
+from basheco.production import ProduceRequest, catalog, inventory, produce
+
+@app.get("/v1/economy/catalog")
+def economy_catalog(account_id: str = Depends(current_user)):
+    return catalog()
+
+@app.get("/v1/economy/inventory")
+def economy_inventory(account_id: str = Depends(current_user)):
+    return inventory(account_id)
+
+@app.post("/v1/economy/produce", status_code=201)
+def economy_produce(data: ProduceRequest, account_id: str = Depends(current_user)):
+    return produce(data, account_id)
