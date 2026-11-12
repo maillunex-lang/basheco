@@ -81,3 +81,17 @@ first. Use Android ARM64 hardware in landscape mode. The demo geography works
 without a game server; player login and persistent MMO gameplay require a
 separately tested HTTPS backend. Passing headless smoke tests does not replace
 real-device acceptance testing.
+
+### Alpha parcel creation (requires updated test server)
+
+After login, select a supported test settlement (Ufa or Mikhailovka) and
+open **Стройка**. Choose the settlement and a zoning type; center the map on
+the intended **game-only** location and press **Создать тестовый участок у центра карты**.
+The client obtains authoritative legacy anchors from `/v1/world/grid`,
+converts the camera cell to the alpha plot API's legacy indices and sends
+`POST /v1/world/plots`. The server checks the quota (at most three per
+account and settlement), parcel conflicts and generated occupancy; a rejection
+never results in a locally invented parcel. On success the client centers the
+map on the returned global cells. Select that plot on the map to construct a
+zone-compatible prototype building via the server-validated endpoint. These
+plots are not cadastral ownership or real construction permissions.

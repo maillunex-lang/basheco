@@ -88,6 +88,8 @@ func _layout() -> void:
         if node.panel != null:
             node.panel.position = Vector2(maxf(12.0, viewport_size.x - 385.0), 90.0)
             node.panel.custom_minimum_size.x = minf(360.0, viewport_size.x - 24.0)
+            if name == "Build" and node.scroll != null:
+                node.scroll.custom_minimum_size.y = minf(440.0, maxf(220.0, viewport_size.y - 185.0))
 
 func _update_active() -> void:
     for section in buttons:
