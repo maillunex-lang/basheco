@@ -33,9 +33,8 @@ class ProductionTests(unittest.TestCase):
                 (self.account,),
             ).fetchone()["id"]
             self.plot=conn.execute(
-                "SELECT id FROM world_plots WHERE sector_id='ufa-prototype-01' "
-                "AND zone='agricultural' AND owner_company_id IS NULL "
-                "ORDER BY tile_x LIMIT 1 FOR UPDATE"
+                "INSERT INTO world_plots(sector_id,tile_x,tile_y,width_tiles,height_tiles,zone) "
+                "VALUES('ufa',80,80,5,5,'agricultural') RETURNING id"
             ).fetchone()["id"]
         self.building=construct(ConstructRequest(
             company_id=self.company,plot_id=self.plot,building_type="greenhouse"
@@ -46,7 +45,7 @@ class ProductionTests(unittest.TestCase):
             conn.execute("DELETE FROM production_runs WHERE company_id=%s",(self.company,))
             conn.execute("DELETE FROM company_inventory WHERE company_id=%s",(self.company,))
             conn.execute("DELETE FROM world_buildings WHERE plot_id=%s",(self.plot,))
-            conn.execute("UPDATE world_plots SET owner_company_id=NULL WHERE id=%s",(self.plot,))
+            conn.execute("DELETE FROM world_plots WHERE id=%s",(self.plot,))
             conn.execute("DELETE FROM companies WHERE id=%s",(self.company,))
             conn.execute("DELETE FROM accounts WHERE id=%s",(self.account,))
 
