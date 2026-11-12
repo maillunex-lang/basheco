@@ -1,0 +1,101 @@
+name: Android alpha APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'client/**'
+      - '.github/workflows/android-alpha.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: basheco-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-debug:
+    name: Build and verify Android debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Godot 4.6 and official export templates
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.6.0
+          use-dotnet: false
+          include-templates: true
+
+      - name: Android SDK and debug keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$sdk"
+          test -f "$sdk/platform-tools/adb"
+          test -d "$sdk/platforms/android-35"
+          test -x "$sdk/build-tools/35.0.0/apksigner"
+          echo "BASHECO_SDK=$sdk" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname 'CN=Android Debug,O=Android,C=US' >/dev/null 2>&1
+
+      - name: Import Godot project
+        run: godot --headless --path client --import
+
+      - name: Set Godot Android export paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/godot"
+          settings="$HOME/.config/godot/editor_settings-4.6.tres"
+          test -f "$settings"
+          cat >> "$settings" <<EOF
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/android_sdk_path = "$BASHECO_SDK"
+          export/android/debug_keystore = "$HOME/.android/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+
+      - name: Godot client regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in grid_parity smoke navigation stage13_pilot; do
+            godot --headless --path client -s "tests/$test.gd"
+          done
+
+      - name: Export Android APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          godot --headless --path client --export-debug Android "$PWD/build/BASHECO-alpha-debug.apk"
+          test -s build/BASHECO-alpha-debug.apk
+          "$BASHECO_SDK/build-tools/35.0.0/apksigner" verify --verbose build/BASHECO-alpha-debug.apk
+          "$BASHECO_SDK/build-tools/35.0.0/aapt" dump badging build/BASHECO-alpha-debug.apk | head -n 6
+          sha256sum build/BASHECO-alpha-debug.apk > build/BASHECO-alpha-debug.apk.sha256
+
+      - name: Upload APK for invited testers
+        uses: actions/upload-artifact@v4
+        with:
+          name: BASHECO-Android-alpha-debug
+          path: |
+            build/BASHECO-alpha-debug.apk
+            build/BASHECO-alpha-debug.apk.sha256
+          retention-days: 14
+          if-no-files-found: error
