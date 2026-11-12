@@ -3,6 +3,7 @@ extends CanvasLayer
 const ITEMS := [
     ["Карта", "res://assets/icons/warehouse.svg", ""],
     ["Компания", "res://assets/icons/company.svg", "Company"],
+    ["Стройка", "res://assets/icons/warehouse.svg", "Build"],
     ["Производство", "res://assets/icons/workshop.svg", "Economy"],
     ["Рынок", "res://assets/icons/market.svg", "Market"]
 ]
@@ -37,7 +38,7 @@ func _layout() -> void:
     bar.add_theme_constant_override("separation", int(8 * scale_factor))
     for button in bar.get_children():
         button.custom_minimum_size = Vector2(118 * scale_factor, 58)
-    for name in ["Company", "Economy", "Market"]:
+    for name in ["Company", "Economy", "Market", "Build"]:
         var node: Node = get_parent().get_node(name)
         if node.panel != null:
             node.panel.position = Vector2(maxf(12.0, size.x - 385.0), 90.0)
