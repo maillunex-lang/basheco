@@ -47,6 +47,9 @@ func _run() -> void:
         float(p["tile_y"]) + float(p["height_tiles"]) / 2.0)
     world._select_at(center)
     assert(world.selected_plot == 0)
+    world.world_visible = true
+    world.get_node("Login").panel.visible = false
+    var before_drag: Vector2 = world.camera_offset
     var down := InputEventScreenTouch.new()
     down.index = 0
     down.pressed = true
@@ -56,7 +59,7 @@ func _run() -> void:
     drag.index = 0
     drag.position = Vector2(220, 320)
     world._unhandled_input(drag)
-    assert(world.camera_offset.distance_to(Vector2(670, 110)) < 0.01)
+    assert(world.camera_offset.distance_to(before_drag + Vector2(20, 20)) < 0.01)
     var up := InputEventScreenTouch.new()
     up.index = 0
     up.position = drag.position
