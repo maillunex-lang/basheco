@@ -7,6 +7,19 @@ var company: OptionButton
 var company_ids: Array[String] = []
 var message: Label
 var world: Node2D
+var building_picker: OptionButton
+var selected_info: Label
+var build_button: Button
+var busy := false
+# Verified server building_types in migration 004_world_prototype.sql.
+# Sizes are plot dimensions, not building footprint specifications.
+const CATALOG := [
+    {"code": "shop", "title": "Магазин", "zone": "commercial"},
+    {"code": "workshop", "title": "Мастерская", "zone": "industrial"},
+    {"code": "greenhouse", "title": "Теплица", "zone": "agricultural"}
+]
+const ZONE_NAMES := {"commercial": "Торговая", "industrial": "Промышленная", "agricultural": "Сельскохозяйственная"}
+
 
 func _ready() -> void:
     world = get_parent()
@@ -26,10 +39,18 @@ func _ready() -> void:
     company = OptionButton.new()
     company.add_item("Сначала создайте компанию")
     layout.add_child(company)
-    var build := Button.new()
-    build.text = "Построить на выбранном участке"
-    build.pressed.connect(_build)
-    layout.add_child(build)
+    building_picker = OptionButton.new()
+    for item in CATALOG:
+        building_picker.add_item(item["title"])
+    building_picker.item_selected.connect(func(_index: int): _refresh_selection())
+    layout.add_child(building_picker)
+    selected_info = Label.new()
+    selected_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    layout.add_child(selected_info)
+    build_button = Button.new()
+    build_button.text = "Построить на выбранном участке"
+    build_button.pressed.connect(_build)
+    layout.add_child(build_button)
     var reload := Button.new()
     reload.text = "Обновить кварталы"
     reload.pressed.connect(func(): world.refresh_parcels())
@@ -38,7 +59,45 @@ func _ready() -> void:
     message.text = "Выберите свободный участок на карте"
     layout.add_child(message)
     panel.visible = false
+    set_process(true)
+    _refresh_selection()
     world.get_node("Company").companies_updated.connect(_set_companies)
+
+func _process(_delta: float) -> void:
+    if panel.visible:
+        _refresh_selection()
+
+func _current_building() -> Dictionary:
+    var index := building_picker.selected
+    if index < 0 or index >= CATALOG.size():
+        return {}
+    return CATALOG[index]
+
+func _selection_error() -> String:
+    if api.access_token.is_empty():
+        return "Войдите в игру, чтобы строить"
+    if _selected_company_id().is_empty():
+        return "Сначала создайте компанию"
+    if world.selected_plot < 0 or world.selected_plot >= world.plots.size():
+        return "Выберите участок на карте"
+    var plot: Dictionary = world.plots[world.selected_plot]
+    if not plot.has("id") or str(plot.get("id", "")).is_empty():
+        return "Нужен участок, подтверждённый сервером"
+    if plot.get("owner_company_id") != null and str(plot.get("owner_company_id")) != "":
+        return "Участок уже занят"
+    var chosen := _current_building()
+    if chosen.is_empty() or chosen["zone"] != str(plot.get("zone", "")):
+        return "Тип здания не подходит для зоны участка"
+    return ""
+
+func _refresh_selection() -> void:
+    var detail := "Выберите свободный участок на карте"
+    if world.selected_plot >= 0 and world.selected_plot < world.plots.size():
+        var plot: Dictionary = world.plots[world.selected_plot]
+        var zone := str(plot.get("zone", ""))
+        detail = "%s зона · участок %s×%s клеток" % [ZONE_NAMES.get(zone, zone), str(plot.get("width_tiles", "?")), str(plot.get("height_tiles", "?"))]
+    selected_info.text = detail + "\nЦена и размеры здания пока не определены сервером."
+    build_button.disabled = busy or _selection_error() != ""
 
 func _set_companies(companies: Array) -> void:
     var previous := _selected_company_id()
@@ -62,20 +121,27 @@ func _selected_company_id() -> String:
     return company_ids[company.selected]
 
 func _build() -> void:
-    if api.access_token.is_empty() or world.selected_plot < 0 or _selected_company_id().is_empty():
-        message.text = "Войдите и выберите участок"
+    if busy:
+        return
+    var reason := _selection_error()
+    if not reason.is_empty():
+        message.text = reason
         return
     var plot: Dictionary = world.plots[world.selected_plot]
-    if not plot.has("id") or str(plot.get("owner_company_id", "")) not in ["", "<null>"]:
-        message.text = "Нужен свободный участок с сервера"
-        return
-    var kind: String = {"commercial":"shop", "industrial":"workshop", "agricultural":"greenhouse"}.get(str(plot["zone"]), "")
+    var kind := str(_current_building()["code"])
     var payload := JSON.stringify({"company_id":_selected_company_id(), "plot_id":str(plot["id"]), "building_type":kind})
     var headers := PackedStringArray(["Authorization: Bearer " + api.access_token, "Content-Type: application/json"])
+    busy = true
+    _refresh_selection()
     var err := http.request(api.base_url + "/v1/world/buildings", headers, HTTPClient.METHOD_POST, payload)
+    if err != OK:
+        busy = false
+        _refresh_selection()
     message.text = "Строительство..." if err == OK else "Нет соединения"
 
 func _on_result(_result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+    busy = false
+    _refresh_selection()
     if status == 201:
         var result: Variant = JSON.parse_string(body.get_string_from_utf8())
         message.text = "Построено! Новых участков: " + str(result.get("new_plots", 0))
