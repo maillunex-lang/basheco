@@ -1,4 +1,4 @@
-"""Stage 1 loopback API. Not ready for public exposure; rate limits pending."""
+"""Stage 1 loopback API. Not ready for public exposure."""
 from __future__ import annotations
 import hashlib
 import re
@@ -118,6 +118,7 @@ def register(data: RegisterRequest, request: Request):
                 (data.email, data.display_name, hashed),
             ).fetchone()
             conn.execute("INSERT INTO wallets(account_id) VALUES(%s)", (row["id"],))
+            conn.execute("INSERT INTO security_audit(event_type,actor_account_id,subject_id) VALUES(%s,%s,%s)", ("account.registered",row["id"],row["id"]))
         return {"account_id": str(row["id"])}
     except errors.UniqueViolation:
         raise HTTPException(409, "Account already exists")
@@ -146,6 +147,7 @@ def login(data: LoginRequest, request: Request):
             "INSERT INTO sessions(token_hash,account_id,expires_at) VALUES(%s,%s,%s)",
             (hashlib.sha256(token.encode("ascii")).hexdigest(), user["id"], datetime.now(timezone.utc)+timedelta(days=7)),
         )
+        conn.execute("INSERT INTO security_audit(event_type,actor_account_id,subject_id) VALUES(%s,%s,%s)", ("auth.login",user["id"],user["id"]))
     return {"access_token": token, "token_type": "bearer", "expires_in": 604800}
 
 @app.post("/v1/auth/logout", status_code=204)
@@ -153,6 +155,7 @@ def logout(account_id: str = Depends(current_user), authorization: str = Header(
     token_hash = hashlib.sha256(authorization[7:].encode("ascii")).hexdigest()
     with connect() as conn:
         conn.execute("DELETE FROM sessions WHERE token_hash=%s AND account_id=%s", (token_hash, account_id))
+        conn.execute("INSERT INTO security_audit(event_type,actor_account_id,subject_id) VALUES(%s,%s,%s)", ("auth.logout",account_id,account_id))
 
 @app.get("/v1/me")
 def me(account_id: str = Depends(current_user)):
@@ -171,6 +174,7 @@ def create_company(data: CompanyRequest, account_id: str = Depends(current_user)
         wallet = conn.execute(
             "INSERT INTO wallets(company_id) VALUES(%s) RETURNING id", (row["id"],),
         ).fetchone()
+        conn.execute("INSERT INTO security_audit(event_type,actor_account_id,subject_id) VALUES(%s,%s,%s)", ("company.created",account_id,row["id"]))
     return {"id": str(row["id"]), "name": row["name"], "wallet_id": str(wallet["id"])}
 
 @app.get("/v1/companies")
@@ -246,4 +250,5 @@ def transfer(data: TransferRequest, account_id: str = Depends(current_user)):
             "INSERT INTO ledger_postings(transfer_id,wallet_id,delta_kopecks) VALUES(%s,%s,%s),(%s,%s,%s)",
             (inserted["id"],debit,-data.amount_kopecks,inserted["id"],credit,data.amount_kopecks),
         )
+        conn.execute("INSERT INTO security_audit(event_type,actor_account_id,subject_id) VALUES(%s,%s,%s)", ("wallet.transfer",account_id,inserted["id"]))
     return {"transfer_id": str(inserted["id"]), "replayed": False}
