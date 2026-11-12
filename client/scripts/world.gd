@@ -3,6 +3,8 @@ extends Node2D
 const INITIAL_GRID_SIZE := 200
 var world_width := INITIAL_GRID_SIZE
 var world_height := INITIAL_GRID_SIZE
+const MIN_ZOOM := 0.65
+const MAX_ZOOM := 2.4
 const TILE_W := 64.0
 const TILE_H := 32.0
 const ZONES := {
@@ -47,14 +49,44 @@ func _ready() -> void:
     queue_redraw()
 
 func _focus_on_district() -> void:
-    var center := iso(12.0, 12.0)
-    camera_offset = get_viewport_rect().size * 0.5 - center * zoom_level
+    camera_offset = get_viewport_rect().size * 0.5 - iso(12.0, 12.0) * zoom_level
     camera_initialized = true
+    _camera_changed()
+
+func zoom_at(screen_point: Vector2, factor: float) -> void:
+    var old_zoom := zoom_level
+    zoom_level = clampf(old_zoom * factor, MIN_ZOOM, MAX_ZOOM)
+    camera_offset = screen_point - (screen_point - camera_offset) * (zoom_level / old_zoom)
+    _camera_changed()
+
+func _clamp_camera() -> void:
+    var size := get_viewport_rect().size
+    var center := size * 0.5
+    var margin := size * 0.8
+    var corners := [
+        iso(0.0, 0.0) * zoom_level,
+        iso(float(world_width), 0.0) * zoom_level,
+        iso(0.0, float(world_height)) * zoom_level,
+        iso(float(world_width), float(world_height)) * zoom_level
+    ]
+    var minimum: Vector2 = corners[0]
+    var maximum: Vector2 = corners[0]
+    for corner in corners:
+        minimum = minimum.min(corner)
+        maximum = maximum.max(corner)
+    camera_offset.x = clampf(camera_offset.x, center.x - maximum.x - margin.x, center.x - minimum.x + margin.x)
+    camera_offset.y = clampf(camera_offset.y, center.y - maximum.y - margin.y, center.y - minimum.y + margin.y)
+
+func _camera_changed() -> void:
+    _clamp_camera()
+    if has_node("OSM") and is_node_ready():
+        $OSM.refresh()
+    queue_redraw()
 
 func _on_viewport_resized() -> void:
     if camera_initialized and not world_visible:
         _focus_on_district()
-    queue_redraw()
+    _camera_changed()
 
 func connect_to_server(url: String, token: String) -> void:
     $API.configure(url, token)
@@ -76,7 +108,7 @@ func _on_sector_loaded(data: Dictionary) -> void:
     world_height = maxi(INITIAL_GRID_SIZE, int(sector.get("height_tiles", INITIAL_GRID_SIZE)))
     selected_plot = -1
     _update_hud()
-    queue_redraw()
+    _camera_changed()
 
 func _on_api_error(_status: int, message: String) -> void:
     hud.text = "BASHECO | " + message
@@ -150,9 +182,9 @@ func _unhandled_input(event: InputEvent) -> void:
         return
     if event is InputEventMouseButton:
         if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
-            zoom_level = minf(2.0, zoom_level * 1.12)
+            zoom_at(event.position, 1.12)
         elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
-            zoom_level = maxf(0.3, zoom_level / 1.12)
+            zoom_at(event.position, 1.0 / 1.12)
         elif event.button_index == MOUSE_BUTTON_MIDDLE:
             dragging = event.pressed
         elif event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -160,6 +192,7 @@ func _unhandled_input(event: InputEvent) -> void:
         queue_redraw()
     elif event is InputEventMouseMotion and dragging:
         camera_offset += event.relative
+        _camera_changed()
     elif event is InputEventScreenTouch:
         if event.pressed:
             touches[event.index] = event.position
@@ -169,22 +202,26 @@ func _unhandled_input(event: InputEvent) -> void:
             touches.erase(event.index)
             if was_tap and start.distance_to(event.position) < 18.0:
                 _select_at(event.position)
-        if touches.size() != 2:
+        if touches.size() == 2:
+            var positions: Array = touches.values()
+            pinch_distance = (positions[0] as Vector2).distance_to(positions[1] as Vector2)
+        else:
             pinch_distance = 0.0
     elif event is InputEventScreenDrag:
         var previous: Vector2 = touches.get(event.index, event.position)
         touches[event.index] = event.position
         if touches.size() == 1:
             camera_offset += event.position - previous
+            _camera_changed()
         elif touches.size() == 2:
             var positions: Array = touches.values()
             var distance: float = positions[0].distance_to(positions[1])
             if pinch_distance > 0.0:
-                zoom_level = clampf(zoom_level * distance / pinch_distance, 0.3, 2.0)
+                var midpoint: Vector2 = (positions[0] + positions[1]) * 0.5
+                zoom_at(midpoint, distance / pinch_distance)
             pinch_distance = distance
         queue_redraw()
-    $OSM.refresh()
-    queue_redraw()
+    _camera_changed()
 
 func _select_at(point: Vector2) -> void:
     var local := (point - camera_offset) / zoom_level
