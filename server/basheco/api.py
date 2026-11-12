@@ -340,6 +340,12 @@ def world_viewport(sector_id: str, min_x: int, min_y: int, max_x: int, max_y: in
 def get_sector(sector_id: str, account_id: str = Depends(current_user)):
     return sector_map(sector_id)
 
+from basheco.placement_preview import PreviewRequest, inspect_placement
+
+@app.post("/v1/world/placement/preview")
+def preview_world_placement(data: PreviewRequest, account_id: str = Depends(current_user)):
+    return inspect_placement(data, account_id)
+
 @app.post("/v1/world/buildings", status_code=201)
 def construct_building(data: ConstructRequest, account_id: str = Depends(current_user)):
     return construct(data, account_id)

@@ -64,3 +64,13 @@ def preview(footprint: Iterable[tuple[int, int]], rotation: int, origin: tuple[i
     xs = [x for x, _ in cells]
     ys = [y for _, y in cells]
     return Placement(cells, rotation, (min(xs), min(ys), max(xs) + 1, max(ys) + 1))
+
+def catalog_footprint(raw: object) -> list[tuple[int, int]]:
+    """Decode the versioned catalog JSON footprint, refusing malformed entries."""
+    if not isinstance(raw, list) or not 1 <= len(raw) <= 4096:
+        raise PlacementError("Invalid catalog footprint")
+    if any(not isinstance(cell, list) or len(cell) != 2 for cell in raw):
+        raise PlacementError("Invalid catalog footprint cell")
+    cells = [tuple(cell) for cell in raw]
+    rotated_cells(cells, 0)
+    return cells

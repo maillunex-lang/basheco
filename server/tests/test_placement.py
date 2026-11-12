@@ -31,3 +31,10 @@ class PlacementTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+class CatalogFootprintTests(unittest.TestCase):
+    def test_catalog_json_contract(self):
+        from basheco.placement import catalog_footprint
+        self.assertEqual(catalog_footprint([[0, 0], [1, 0]]), [(0, 0), (1, 0)])
+        for bad in (None, {}, [], [[0, 0], [0, 0]], [[0, 0.5]], [[True, 0]], [[-1, 0]]):
+            with self.subTest(bad=bad), self.assertRaises(PlacementError):
+                catalog_footprint(bad)
