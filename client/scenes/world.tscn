@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/api_client.gd" id="2_api"]
@@ -10,6 +10,8 @@
 [ext_resource type="Script" path="res://scripts/economy_panel.gd" id="5_economy"]
 
 [ext_resource type="Script" path="res://scripts/market_panel.gd" id="6_market"]
+
+[ext_resource type="Script" path="res://scripts/company_panel.gd" id="7_company"]
 
 [node name="World" type="Node2D"]
 script = ExtResource("1_world")
@@ -28,3 +30,6 @@ script = ExtResource("5_economy")
 
 [node name="Market" type="CanvasLayer" parent="."]
 script = ExtResource("6_market")
+
+[node name="Company" type="CanvasLayer" parent="."]
+script = ExtResource("7_company")
