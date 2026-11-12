@@ -88,6 +88,8 @@ func _chunk_visible(key: Vector2i) -> bool:
     return viewport.intersects(Rect2(min_pos, max_pos - min_pos))
 
 func _draw() -> void:
+    if not parent_world.world_visible:
+        return
     if not visible_layer:
         return
     var drawn: Dictionary = {}
