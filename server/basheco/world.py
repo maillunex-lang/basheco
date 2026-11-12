@@ -29,6 +29,40 @@ def sector_map(sector_id: str):
         ).fetchall()
         return {"sector": sector, "plots": plots}
 
+def sector_viewport(sector_id: str, min_x: int, min_y: int, max_x: int, max_y: int):
+    """Return only server-owned parcels intersecting a bounded camera rectangle.
+
+    This is a read-only companion to sector_map. It does not change plot IDs,
+    grant land, or assume that OSM geometry is player-owned.
+    """
+    if max_x <= min_x or max_y <= min_y:
+        raise HTTPException(422, "Invalid viewport")
+    if max_x - min_x > 512 or max_y - min_y > 512:
+        raise HTTPException(422, "Viewport too large")
+    with connect() as conn:
+        sector = conn.execute(
+            "SELECT id,name,city,width_tiles,height_tiles,geometry_source "
+            "FROM world_sectors WHERE id=%s", (sector_id,),
+        ).fetchone()
+        if sector is None:
+            raise HTTPException(404, "Sector not found")
+        plots = conn.execute(
+            "SELECT p.id,p.tile_x,p.tile_y,p.width_tiles,p.height_tiles,p.zone,"
+            "p.owner_company_id,b.id AS building_id,b.building_type "
+            "FROM world_plots p LEFT JOIN world_buildings b ON b.plot_id=p.id "
+            "WHERE p.sector_id=%s "
+            "AND p.tile_x < %s AND p.tile_x + p.width_tiles > %s "
+            "AND p.tile_y < %s AND p.tile_y + p.height_tiles > %s "
+            "ORDER BY p.tile_y,p.tile_x LIMIT 2001",
+            (sector_id, max_x, min_x, max_y, min_y),
+        ).fetchall()
+        if len(plots) > 2000:
+            raise HTTPException(413, "Viewport plot count exceeds limit")
+        return {"sector": sector, "plots": plots, "viewport": {
+            "min_x": min_x, "min_y": min_y, "max_x": max_x, "max_y": max_y,
+        }}
+
+
 def grow_district(conn, plot):
     """Open adjacent prototype parcels after construction, under a sector lock.
 
