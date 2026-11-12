@@ -52,6 +52,12 @@ func _run() -> void:
     assert(not market.panel.visible)
     nav._show_section("")
     assert(not build_panel.panel.visible)
+    var geo = world.get_node("Geography")
+    assert(geo.visible and geo.level == 0)
+    geo._select_district(geo.catalog["districts"][0])
+    assert(geo.level == 2)
+    geo._enter_location(geo.catalog["districts"][0]["locations"][0])
+    assert(not geo.visible)
     var p: Dictionary = world.plots[0]
     var center: Vector2 = world.project_point(
         float(p["tile_x"]) + float(p["width_tiles"]) / 2.0,
