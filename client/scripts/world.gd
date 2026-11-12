@@ -80,6 +80,10 @@ func _draw() -> void:
             _tile(x, y, Color("#263e42") if (x + y) % 2 == 0 else Color("#294449"))
     for i in range(plots.size()):
         var p: Dictionary = plots[i]
+        var px := int(p["tile_x"])
+        var py := int(p["tile_y"])
+        if px >= view[2] or py >= view[3] or px + int(p["width_tiles"]) <= view[0] or py + int(p["height_tiles"]) <= view[1]:
+            continue
         var color: Color = ZONES.get(str(p["zone"]), Color.GRAY)
         if i == selected_plot:
             color = color.lightened(0.32)
