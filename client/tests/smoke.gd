@@ -112,7 +112,7 @@ func _run() -> void:
     assert(world.world_min_y <= int(floor(rural_extent.position.y)))
     assert(world.get_node("HUD").geo_credit.text.contains("Михайловка"))
     assert(world.open_location("ufa"))
-    assert(world.plots.size() == 6)
+    assert(world.plots.is_empty())
     var original_max_x: int = world.world_width
     world.plots.append({"tile_x": original_max_x + 25, "tile_y": 15, "width_tiles": 7, "height_tiles": 7, "zone": "industrial"})
     world._apply_geography_extent()
