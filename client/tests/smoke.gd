@@ -12,6 +12,8 @@ func _run() -> void:
     assert(world.geo_background.ready)
     assert(world.geo_background.BUILDING_SPRITES.size() == 3)
     assert(world.geo_background.TREE_SPRITE.get_width() > 0)
+    for _i in range(8):
+        world.geo_background.process_pending_chunks()
     assert(world.geo_background.features.size() > 10)
     assert(world.geo_background.manifest.get("license") == "ODbL 1.0")
     assert(world.geo_background.to_tile([0.0, 0.0]) == Vector2(25.0, 25.0))
