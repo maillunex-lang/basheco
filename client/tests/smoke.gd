@@ -71,6 +71,16 @@ func _run() -> void:
     assert(geo.level == 2)
     geo._enter_location(geo.catalog["districts"][0]["locations"][0])
     assert(not geo.visible)
+    geo.open_map()
+    geo._select_district(geo.catalog["districts"][1])
+    geo._enter_location(geo.catalog["districts"][1]["locations"][0])
+    assert(world.current_location_id == "mikhailovka")
+    assert(world.plots.is_empty())
+    assert(world.geo_background.features.size() > 10)
+    assert(world.get_node("HUD").geo_credit.text.contains("Михайловка"))
+    assert(world.open_location("ufa"))
+    assert(world.plots.size() == 6)
+    assert(not world.open_location("unknown"))
     var p: Dictionary = world.plots[0]
     var center: Vector2 = world.project_point(
         float(p["tile_x"]) + float(p["width_tiles"]) / 2.0,
