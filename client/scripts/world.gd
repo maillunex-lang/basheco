@@ -19,6 +19,8 @@ var plots: Array[Dictionary] = [
 var zoom_level := 0.85
 var camera_offset := Vector2(650, 90)
 var dragging := false
+var touches: Dictionary = {}
+var pinch_distance := 0.0
 var selected_plot := -1
 var hud: Label
 
@@ -99,7 +101,31 @@ func _unhandled_input(event: InputEvent) -> void:
         queue_redraw()
     elif event is InputEventMouseMotion and dragging:
         camera_offset += event.relative
+        elif event is InputEventScreenTouch:
+        if event.pressed:
+            touches[event.index] = event.position
+        else:
+            var was_tap := touches.size() == 1 and touches.has(event.index)
+            var start: Vector2 = touches.get(event.index, event.position)
+            touches.erase(event.index)
+            if was_tap and start.distance_to(event.position) < 18.0:
+                _select_at(event.position)
+        if touches.size() != 2:
+            pinch_distance = 0.0
+    elif event is InputEventScreenDrag:
+        var previous: Vector2 = touches.get(event.index, event.position)
+        touches[event.index] = event.position
+        if touches.size() == 1:
+            camera_offset += event.position - previous
+        elif touches.size() == 2:
+            var positions: Array = touches.values()
+            var distance: float = positions[0].distance_to(positions[1])
+            if pinch_distance > 0.0:
+                zoom_level = clampf(zoom_level * distance / pinch_distance, 0.3, 2.0)
+            pinch_distance = distance
         queue_redraw()
+    $OSM.refresh()
+    queue_redraw()
 
 func _select_at(point: Vector2) -> void:
     var local := (point - camera_offset) / zoom_level
@@ -113,6 +139,7 @@ func _select_at(point: Vector2) -> void:
             selected_plot = i
             break
     _update_hud()
+    $OSM.refresh()
     queue_redraw()
 
 func _update_hud() -> void:
