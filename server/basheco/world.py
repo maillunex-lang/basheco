@@ -38,7 +38,7 @@ def construct(data: ConstructRequest, account_id: str):
         if not company:
             raise HTTPException(403, "Company not owned by player")
         plot = conn.execute(
-            "SELECT id,sector_id,zone,owner_company_id FROM world_plots "
+            "SELECT id,sector_id,zone,owner_company_id,tile_x,tile_y,width_tiles,height_tiles FROM world_plots "
             "WHERE id=%s FOR UPDATE", (data.plot_id,),
         ).fetchone()
         if not plot:
@@ -64,5 +64,19 @@ def construct(data: ConstructRequest, account_id: str):
             "VALUES(%s,%s,%s) RETURNING id",
             (data.plot_id,data.company_id,data.building_type),
         ).fetchone()
+        # Grow sector in bounded increments when development approaches an edge.
+        # Existing plot and building identifiers remain unchanged.
+        conn.execute(
+            "UPDATE world_sectors s SET "
+            "width_tiles=LEAST(4096, GREATEST(s.width_tiles, %s + 64)), "
+            "height_tiles=LEAST(4096, GREATEST(s.height_tiles, %s + 64)) "
+            "WHERE s.id=%s AND "
+            "(%s >= s.width_tiles - 16 OR %s >= s.height_tiles - 16)",
+            (plot["tile_x"] + plot["width_tiles"],
+             plot["tile_y"] + plot["height_tiles"],
+             plot["sector_id"],
+             plot["tile_x"] + plot["width_tiles"],
+             plot["tile_y"] + plot["height_tiles"]),
+        )
         return {"building_id": str(building["id"]), "plot_id": str(data.plot_id),
                 "company_id": str(data.company_id), "building_type": data.building_type}
