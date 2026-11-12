@@ -27,6 +27,13 @@ func _run() -> void:
     build_panel._set_companies([{"id":"test-company-1", "name":"Тестовая компания"}])
     assert(build_panel.company_ids.size() == 1)
     assert(build_panel.company.get_item_text(0) == "Тестовая компания")
+    assert(build_panel._selected_company_id() == "test-company-1")
+    var market = world.get_node("Market")
+    market._set_companies([{"id":"test-company-1", "name":"Тестовая компания"}, {"id":"test-company-2", "name":"Другая компания"}])
+    assert(market._selected_company_id() == "test-company-1")
+    market.company_field.select(1)
+    market._set_companies([{"id":"test-company-2", "name":"Другая компания"}, {"id":"test-company-1", "name":"Тестовая компания"}])
+    assert(market._selected_company_id() == "test-company-2")
     assert(world.get_node("Login").display_name != null)
     var p: Dictionary = world.plots[0]
     var center: Vector2 = world.project_point(
