@@ -11,6 +11,7 @@ const GeoBackground = preload("res://scripts/geo_background.gd")
 const WorldGrid = preload("res://scripts/world_grid.gd")
 const WorldOverlay = preload("res://scripts/world_overlay.gd")
 const IsoBuilding = preload("res://scripts/iso_building.gd")
+const GeneratedTown = preload("res://scripts/generated_town.gd")
 const GENERATED := "res://data/generated_locations.json"
 var generated_objects: Array[Dictionary] = []
 var geo_background = GeoBackground.new()
@@ -18,6 +19,7 @@ const DEFAULT_SETTLEMENT := "ufa"
 var current_location_id := DEFAULT_SETTLEMENT
 var admin_target_name := ""
 var admin_target_cell := Vector2i.ZERO
+var generated_focus_cell := Vector2i.ZERO
 const MAX_VISIBLE_TILES := 18000
 const MIN_ZOOM := 0.004
 const MAX_ZOOM := 2.4
@@ -71,6 +73,8 @@ func _ready() -> void:
                 for obj in location.get("objects", []):
                     generated_objects.append(obj)
     geo_background.load_world(self)
+    # Keep administrative navigation, but retire legacy OSM geometry from play.
+    geo_background.layer.visible = false
     overlay = WorldOverlay.new()
     overlay.name = "Overlay"
     add_child(overlay)
@@ -94,7 +98,7 @@ func _ready() -> void:
     queue_redraw()
 
 func _process(_delta: float) -> void:
-    if world_visible and geo_background.process_pending_chunks(self):
+    if false and world_visible and geo_background.process_pending_chunks(self):
         overlay.queue_redraw()
     if world_visible:
         _viewport_cooldown = maxf(0.0, _viewport_cooldown - _delta)
@@ -172,7 +176,8 @@ func _focus_on_district() -> void:
         camera_initialized = true
         return
     zoom_level = DEFAULT_ZOOM
-    center_on_cell(geo_background.settlements[target]["focus_cell"])
+    generated_focus_cell = geo_background.settlements[target]["focus_cell"]
+    center_on_cell(generated_focus_cell)
 
 func zoom_at(screen_point: Vector2, factor: float) -> void:
     var old_zoom := zoom_level
@@ -215,7 +220,7 @@ func _camera_changed() -> void:
         _update_hud()
         if has_node("HUD") and $HUD.is_node_ready():
             $HUD.update_geography_credit(here)
-    geo_background.update_view(self)
+    # No legacy OSM chunk streaming in generated-world mode.
     queue_redraw()
     if overlay != null:
         overlay.queue_redraw()
@@ -275,7 +280,7 @@ func _on_sector_loaded(data: Dictionary) -> void:
     plots = verified
     unplaced_plot_count = int(data.get("unplaced_plot_count", 0))
     world_visible = true
-    occlusion_button.visible = true
+    occlusion_button.visible = false
     selected_plot = -1
     for i in range(plots.size()):
         if not selected_id.is_empty() and str(plots[i].get("id", "")) == selected_id:
@@ -290,9 +295,10 @@ func open_location(location_id: String) -> bool:
     admin_target_name = ""
     selected_plot = -1
     world_visible = true
-    occlusion_button.visible = true
+    occlusion_button.visible = false
     zoom_level = DEFAULT_ZOOM
-    center_on_cell(geo_background.settlements[location_id]["focus_cell"])
+    generated_focus_cell = geo_background.settlements[location_id]["focus_cell"]
+    center_on_cell(generated_focus_cell)
     refresh_parcels()
     _update_hud()
     return true
@@ -305,8 +311,9 @@ func open_world_cell(cell: Vector2i, settlement_name: String = "") -> bool:
     selected_plot = -1
     admin_target_name = settlement_name
     admin_target_cell = cell
+    generated_focus_cell = cell
     world_visible = true
-    occlusion_button.visible = true
+    occlusion_button.visible = false
     zoom_level = DEFAULT_ZOOM
     center_on_cell(cell)
     refresh_parcels()
@@ -338,7 +345,7 @@ func _on_api_error(_status: int, message: String) -> void:
 func _draw() -> void:
     if not world_visible:
         return
-    draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color("#121e29"))
+    draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color("#355c48"))
     var view := visible_cell_bounds()
     var nav: Array[int] = geo_background.nav_bounds
     var left := maxi(view[0], nav[0])
@@ -351,7 +358,7 @@ func _draw() -> void:
     # the on-screen part of the grid are drawn, and only at full detail.
     var corners := PackedVector2Array([project_cell(Vector2i(left, top)), project_cell(Vector2i(right, top)),
         project_cell(Vector2i(right, bottom)), project_cell(Vector2i(left, bottom))])
-    draw_colored_polygon(corners, Color("#54765b"))
+    draw_colored_polygon(corners, Color("#698d63"))
     if lod() == 0 and get_node("Build").panel.visible and (right - left) * (bottom - top) <= MAX_VISIBLE_TILES:
         for x in range(left, right + 1):
             draw_line(project_cell(Vector2i(x, top)), project_cell(Vector2i(x, bottom)), Color("#142a32"), 1.0)
@@ -363,10 +370,8 @@ func draw_overlay(canvas: CanvasItem) -> void:
     if not world_visible:
         return
     var view := visible_cell_bounds()
-    geo_background.render_sprites(self, canvas)
-    # Visual-only pilot roads/houses are deliberately not drawn: they did not
-    # respect the real OSM road network and overlapped existing buildings.
-    # Real geographical features remain rendered by geo_background.
+    GeneratedTown.draw_town(canvas, self, view, plots)
+    # Generated scenery is decorative until the server publishes its grid.
     # Construction preview is only an outline of an existing server parcel.
     # It is NOT a building footprint, cadastral clearance or server approval.
     var build_panel = get_node("Build")
