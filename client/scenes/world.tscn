@@ -38,8 +38,8 @@ script = ExtResource("6_market")
 [node name="Company" type="CanvasLayer" parent="."]
 script = ExtResource("7_company")
 
-[node name="Navigation" type="CanvasLayer" parent="."]
-script = ExtResource("8_nav")
-
 [node name="Build" type="CanvasLayer" parent="."]
 script = ExtResource("9_build")
+
+[node name="Navigation" type="CanvasLayer" parent="."]
+script = ExtResource("8_nav")
