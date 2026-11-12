@@ -36,15 +36,15 @@ class WorldTests(unittest.TestCase):
                 self.accounts.append(aid)
                 self.companies.append(cid)
             self.plot = conn.execute(
-                "SELECT id FROM world_plots WHERE sector_id='ufa-prototype-01' AND zone='commercial' "
-                "AND owner_company_id IS NULL ORDER BY tile_x LIMIT 1 FOR UPDATE"
+                "INSERT INTO world_plots(sector_id,tile_x,tile_y,width_tiles,height_tiles,zone) "
+                "VALUES('ufa',2,2,5,5,'commercial') RETURNING id"
             ).fetchone()["id"]
 
     def tearDown(self):
         with connect() as conn:
             conn.execute("DELETE FROM world_buildings WHERE plot_id=%s", (self.plot,))
             conn.execute("UPDATE world_plots SET owner_company_id=NULL WHERE id=%s", (self.plot,))
-            conn.execute("DELETE FROM world_plots WHERE sector_id=%s AND generated_by_growth=true", ("ufa-prototype-01",))
+            conn.execute("DELETE FROM world_plots WHERE id=%s", (self.plot,))
             conn.execute("DELETE FROM companies WHERE id=ANY(%s::uuid[])", (self.companies,))
             conn.execute("DELETE FROM accounts WHERE id=ANY(%s::uuid[])", (self.accounts,))
 
@@ -52,26 +52,26 @@ class WorldTests(unittest.TestCase):
         return ConstructRequest(company_id=self.companies[idx],plot_id=self.plot,building_type=building)
 
     def test_sector_is_prototype(self):
-        world=sector_map("ufa-prototype-01")
-        self.assertEqual(world["sector"]["geometry_source"],"prototype")
-        self.assertEqual(len(world["plots"]),6)
+        world=sector_map("ufa")
+        self.assertEqual(world["sector"]["geometry_source"],"osm-background")
+        self.assertGreaterEqual(len(world["plots"]),1)
 
     def test_viewport_only_intersecting_parcels(self):
-        visible = sector_viewport("ufa-prototype-01", 0, 0, 8, 8)
+        visible = sector_viewport("ufa", 0, 0, 8, 8)
         self.assertEqual(visible["viewport"]["max_x"], 8)
         self.assertEqual(len(visible["plots"]), 1)
         self.assertEqual(visible["plots"][0]["tile_x"], 2)
-        empty = sector_viewport("ufa-prototype-01", 300, 300, 310, 310)
+        empty = sector_viewport("ufa", 300, 300, 310, 310)
         self.assertEqual(empty["plots"], [])
         with self.assertRaises(HTTPException) as ctx:
-            sector_viewport("ufa-prototype-01", 0, 0, 1000, 1000)
+            sector_viewport("ufa", 0, 0, 1000, 1000)
         self.assertEqual(ctx.exception.status_code, 422)
 
     def test_building_and_double_claim(self):
         result=construct(self.req(),str(self.accounts[0]))
         self.assertEqual(result["building_type"],"shop")
         self.assertGreaterEqual(result["new_plots"], 0)
-        expanded = sector_map("ufa-prototype-01")
+        expanded = sector_map("ufa")
         self.assertGreaterEqual(len(expanded["plots"]), 6)
         with self.assertRaises(HTTPException) as ctx:
             construct(self.req(1),str(self.accounts[1]))
