@@ -83,8 +83,9 @@ func _render() -> void:
         for location in current_district.get("locations", []):
             var item: Dictionary = location
             var playable := bool(item.get("playable", false))
-            var caption := "Играть в локации" if playable else "Пока недоступно в Alpha"
-            _entry(str(item.get("name", "")), caption, func(): _enter_location(item), playable)
+            var previewable := bool(item.get("previewable", false))
+            var caption := "Играть в локации" if playable else ("Посмотреть реальную карту (пилот)" if previewable else "Пока недоступно в Alpha")
+            _entry(str(item.get("name", "")), caption, func(): _enter_location(item), playable or previewable)
 
 func _entry(name: String, subtitle: String, action: Callable, enabled: bool) -> void:
     var button := Button.new()
@@ -101,12 +102,10 @@ func _select_district(item: Dictionary) -> void:
     _render()
 
 func _enter_location(item: Dictionary) -> void:
-    if not bool(item.get("playable", false)):
+    if not bool(item.get("playable", false)) and not bool(item.get("previewable", false)):
         return
-    if str(item.get("sector_id", "")) != "ufa-prototype-01":
-        return
-    hide()
-    get_parent()._focus_on_district()
+    if get_parent().open_location(str(item.get("id", ""))):
+        hide()
 
 func _back() -> void:
     if level == 0:
