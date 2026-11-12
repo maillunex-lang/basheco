@@ -36,6 +36,7 @@ services:
       - "127.0.0.1:4219:8000"
     environment:
       DATABASE_URL: postgresql://basheco:${BASHECO_DB_PASSWORD:?Set BASHECO_DB_PASSWORD in private .env}@db:5432/basheco
+      BASHECO_PROXY_SECRET: ${BASHECO_PROXY_SECRET:-}
     depends_on:
       migrate:
         condition: service_completed_successfully
