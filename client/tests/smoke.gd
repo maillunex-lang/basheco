@@ -93,10 +93,26 @@ func _run() -> void:
     var geo_menu = world.get_node("Geography")
     check(geo_menu.level == 0, "geography menu")
     geo_menu.open_map()
-    geo_menu._select_district(geo_menu.catalog["districts"][1])
-    geo_menu._enter_location(geo_menu.catalog["districts"][1]["locations"][0])
-    check(not geo_menu.visible, "menu closes after choosing")
-    check(world.camera_center_cell() == mikhailovka, "camera flew to mikhailovka")
+    check(geo_menu.catalog["districts"].size() == 63, "full municipality catalog")
+    var ufimsky: Dictionary = {}
+    var official_mikh: Dictionary = {}
+    for district in geo_menu.catalog["districts"]:
+        if district["id"] == "M80652000":
+            ufimsky = district
+            for location in district["locations"]:
+                if location["id"] == "S80652440101":
+                    official_mikh = location
+    check(not official_mikh.is_empty(), "Mikhailovka stable OKTMO id")
+    if not official_mikh.is_empty():
+        geo_menu._select_district(ufimsky)
+        geo_menu._enter_location(official_mikh)
+        check(not geo_menu.visible, "menu closes after choosing")
+        var actual: Array = official_mikh["cell"]
+        check(world.camera_center_cell() == Vector2i(int(actual[0]), int(actual[1])), "camera flew to official Mikhailovka position")
+    # Old atlas smoke cases below use the center of the sourced OSM fragment,
+    # which is not the official Wikidata settlement anchor.
+    world.open_location("mikhailovka")
+    check(world.camera_center_cell() == mikhailovka, "atlas focus remains available")
     check(world.current_location_id == "mikhailovka", "location follows the camera")
     check(is_same(geo.manifest, atlas_before) and geo.layer == layer_before, "no second map was loaded")
     check(world.render_origin == WorldGrid.chunk_origin_cell(WorldGrid.cell_to_chunk(mikhailovka.x, mikhailovka.y)), "render origin follows camera")
