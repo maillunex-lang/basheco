@@ -69,7 +69,6 @@ func _ready() -> void:
     info = Label.new()
     info.text = "Войдите в игру для торговли"
     layout.add_child(info)
-    api.authenticated.connect(refresh_listings)
     panel.visible = false
     api.authenticated.connect(load_companies)
 
@@ -142,6 +141,7 @@ func _on_response(_result: int, status: int, _headers_result: PackedStringArray,
         if companies.size() > 0:
             company_field.text = str(companies[0]["id"])
         info.text = "Компаний: " + str(companies.size())
+        refresh_listings()
     elif pending == "list":
         listings = parsed.get("listings", [])
         listing_selector.clear()
