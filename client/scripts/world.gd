@@ -3,6 +3,8 @@ extends Node2D
 const CityChunks = preload("res://scripts/city_chunks.gd")
 const GeoBackground = preload("res://scripts/geo_background.gd")
 var geo_background = GeoBackground.new()
+var current_location_id := "ufa"
+var ufa_saved_plots: Array[Dictionary] = []
 const INITIAL_GRID_SIZE := 200
 var world_width := INITIAL_GRID_SIZE
 var world_height := INITIAL_GRID_SIZE
@@ -54,7 +56,8 @@ func _ready() -> void:
     queue_redraw()
 
 func _focus_on_district() -> void:
-    camera_offset = get_viewport_rect().size * 0.5 - iso(12.0, 12.0) * zoom_level
+    var focus_tile := Vector2(25.0, 25.0) if current_location_id != "ufa" else Vector2(12.0, 12.0)
+    camera_offset = get_viewport_rect().size * 0.5 - iso(focus_tile.x, focus_tile.y) * zoom_level
     camera_initialized = true
     _camera_changed()
 
@@ -106,7 +109,9 @@ func _on_sector_loaded(data: Dictionary) -> void:
         if not item.has("tile_x") or not item.has("tile_y") or not item.has("zone") or not item.has("width_tiles") or not item.has("height_tiles"):
             return
         verified.append(item)
-    plots = verified
+    ufa_saved_plots = verified.duplicate(true)
+    if current_location_id == "ufa":
+        plots = verified
     world_visible = true
     var sector: Dictionary = data.get("sector", {})
     world_width = maxi(INITIAL_GRID_SIZE, int(sector.get("width_tiles", INITIAL_GRID_SIZE)))
@@ -114,6 +119,21 @@ func _on_sector_loaded(data: Dictionary) -> void:
     selected_plot = -1
     _update_hud()
     _camera_changed()
+
+func open_location(location_id: String) -> bool:
+    if location_id != "ufa" and location_id != "mikhailovka":
+        return false
+    geo_background.load_pilot(location_id)
+    if not geo_background.ready:
+        return false
+    current_location_id = location_id
+    plots = ufa_saved_plots.duplicate(true) if location_id == "ufa" and not ufa_saved_plots.is_empty() else (plots if location_id == "ufa" else [])
+    selected_plot = -1
+    world_visible = true
+    _focus_on_district()
+    _update_hud()
+    queue_redraw()
+    return true
 
 func _on_api_error(_status: int, message: String) -> void:
     hud.text = "BASHECO | " + message
@@ -257,6 +277,8 @@ func _update_hud() -> void:
     if selected_plot >= 0:
         var p: Dictionary = plots[selected_plot]
         suffix = "Участок %d · %s" % [selected_plot + 1, str(p["zone"])]
-    hud.text = "УФА  /  %s" % suffix
+    var location_name := "МИХАЙЛОВКА" if current_location_id == "mikhailovka" else "УФА"
+    var location_detail := "Пилот географии · только просмотр" if current_location_id != "ufa" else suffix
+    hud.text = location_name + "  /  " + location_detail
     if has_node("HUD"):
-        $HUD.district_label.text = "УФА  /  " + suffix
+        $HUD.district_label.text = location_name + "  /  " + location_detail
