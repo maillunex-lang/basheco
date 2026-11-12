@@ -104,9 +104,8 @@ func _show_section(section: String) -> void:
         var node: Node = get_parent().get_node(name)
         if node.panel != null:
             node.panel.visible = name == section
-    if section == "":
-        get_parent().get_node("Geography").open_map()
-    else:
-        get_parent().get_node("Geography").hide()
+    get_parent().get_node("Geography").hide()
+    if section == "Company":
+        get_parent().get_node("Company").load_wallets()
     if section == "Market":
         get_parent().get_node("Market").refresh_listings()

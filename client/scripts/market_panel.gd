@@ -141,6 +141,13 @@ func _selected_id() -> String:
         return ""
     return str(listing_selector.get_item_metadata(listing_selector.selected))
 
+func _purchase_payload() -> String:
+    return JSON.stringify({
+        "company_id": _selected_company_id(),
+        "quantity": int(quantity_field.value),
+        "idempotency_key": "buy-" + str(Time.get_ticks_usec()) + "-" + str(randi())
+    })
+
 func _buy() -> void:
     if _selected_company_id().is_empty():
         info.text = "Сначала создайте компанию"
@@ -148,11 +155,7 @@ func _buy() -> void:
     var listing_id := _selected_id()
     if listing_id.is_empty():
         return
-    var payload := JSON.stringify({
-        "company_id": company_field.text.strip_edges(),
-        "quantity": int(quantity_field.value),
-        "idempotency_key": "buy-" + str(Time.get_ticks_usec()) + "-" + str(randi())
-    })
+    var payload := _purchase_payload()
     _request("buy", "/v1/market/listings/" + listing_id + "/buy", HTTPClient.METHOD_POST, payload)
 
 func _cancel() -> void:
@@ -179,4 +182,5 @@ func _on_response(_result: int, status: int, _headers_result: PackedStringArray,
         info.text = "Активных предложений: " + str(listings.size())
     else:
         info.text = "Операция выполнена: " + pending
+        get_parent().get_node("Company").load_wallets()
         refresh_listings()

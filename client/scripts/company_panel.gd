@@ -6,6 +6,9 @@ var starter_http: HTTPRequest
 var panel: PanelContainer
 var name_field: LineEdit
 signal companies_updated(companies: Array)
+signal wallets_updated(wallets: Array)
+var wallet_http: HTTPRequest
+var balances_label: Label
 var companies: Array = []
 var pending := ""
 var busy := false
@@ -19,6 +22,9 @@ func _ready() -> void:
     starter_http = HTTPRequest.new()
     add_child(starter_http)
     starter_http.request_completed.connect(_on_starter_response)
+    wallet_http = HTTPRequest.new()
+    add_child(wallet_http)
+    wallet_http.request_completed.connect(_on_wallet_response)
     api.authenticated.connect(load_companies)
     panel = PanelContainer.new()
     panel.position = Vector2(770, 82)
@@ -39,6 +45,10 @@ func _ready() -> void:
     status_label = Label.new()
     status_label.text = "Войдите в игру"
     layout.add_child(status_label)
+    balances_label = Label.new()
+    balances_label.text = "Баланс: войдите в игру"
+    balances_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    layout.add_child(balances_label)
     panel.visible = false
 
 func _create() -> void:
@@ -82,6 +92,7 @@ func _on_response(_result: int, status: int, _headers: PackedStringArray, body: 
     companies = parsed.get("companies", [])
     status_label.text = "Мои компании: " + str(companies.size()) if companies.size() > 0 else "Создайте первую компанию"
     companies_updated.emit(companies)
+    load_wallets()
     if not companies.is_empty():
         var headers := PackedStringArray(["Authorization: Bearer " + api.access_token])
         starter_http.request(api.base_url + "/v1/companies/" + str(companies[0]["id"]) + "/starter-grant", headers, HTTPClient.METHOD_POST, "{}")
@@ -92,3 +103,34 @@ func _on_starter_response(_result: int, status: int, _headers: PackedStringArray
     var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
     if typeof(parsed) == TYPE_DICTIONARY and int(parsed.get("granted_kopecks", 0)) > 0:
         status_label.text = "Стартовый капитал: 10 000 игровых ₽ начислен!"
+    load_wallets()
+
+func load_wallets() -> void:
+    if api.access_token.is_empty() or wallet_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+        return
+    var headers := PackedStringArray(["Authorization: Bearer " + api.access_token])
+    var err := wallet_http.request(api.base_url + "/v1/wallets", headers)
+    if err != OK:
+        balances_label.text = "Баланс: нет соединения"
+
+func _on_wallet_response(_result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+    if status != 200:
+        balances_label.text = "Баланс: ошибка HTTP " + str(status)
+        return
+    var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+    if typeof(parsed) != TYPE_DICTIONARY or typeof(parsed.get("wallets")) != TYPE_ARRAY:
+        balances_label.text = "Баланс: неверный ответ сервера"
+        return
+    var wallets: Array = parsed["wallets"]
+    var amounts: Dictionary = {}
+    for wallet in wallets:
+        if typeof(wallet) == TYPE_DICTIONARY and wallet.get("company_id") != null:
+            amounts[str(wallet["company_id"])] = int(wallet.get("balance_kopecks", 0))
+    var rows := PackedStringArray()
+    for owned in companies:
+        var id := str(owned.get("id", ""))
+        if amounts.has(id):
+            var kopecks: int = amounts[id]
+            rows.append("%s: %d,%02d ₽" % [str(owned.get("name", "Компания")), int(kopecks / 100), absi(kopecks % 100)])
+    balances_label.text = "\n".join(rows) if not rows.is_empty() else "Баланс компании: нет данных"
+    wallets_updated.emit(wallets)

@@ -10,6 +10,7 @@ var center_button: Button
 var plus_button: Button
 var location_button: Button
 var balance_label: Label
+var current_companies: Array = []
 var geo_credit: Label
 var performance_label: Label
 var performance_elapsed := 0.0
@@ -78,6 +79,7 @@ func _ready() -> void:
     performance_label.visible = OS.has_feature("debug")
     add_child(performance_label)
     get_parent().get_node("Company").companies_updated.connect(_companies_updated)
+    get_parent().get_node("Company").wallets_updated.connect(_wallets_updated)
     get_viewport().size_changed.connect(_layout)
     _layout()
     hide()
@@ -126,6 +128,7 @@ func _layout() -> void:
         performance_label.position = Vector2(16, maxf(76.0, size.y - 78.0))
 
 func _companies_updated(companies: Array) -> void:
+    current_companies = companies
     if companies.is_empty():
         company_label.text = "Создайте компанию"
         balance_label.text = "Баланс: откройте компанию"
@@ -134,6 +137,17 @@ func _companies_updated(companies: Array) -> void:
         # The company-list response is not a verified balance endpoint.
         # Never display a guessed sum or the starter grant as current funds.
         balance_label.text = "Баланс: нет данных"
+
+func _wallets_updated(wallets: Array) -> void:
+    if current_companies.is_empty():
+        return
+    var id := str(current_companies[0].get("id", ""))
+    for wallet in wallets:
+        if typeof(wallet) == TYPE_DICTIONARY and str(wallet.get("company_id", "")) == id:
+            var kopecks := int(wallet.get("balance_kopecks", 0))
+            balance_label.text = "Баланс: %d,%02d ₽" % [int(kopecks / 100), absi(kopecks % 100)]
+            return
+    balance_label.text = "Баланс: нет данных"
 
 func update_geography_credit(location_id: String) -> void:
     if geo_credit == null:

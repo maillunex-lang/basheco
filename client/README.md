@@ -67,3 +67,17 @@ python server/tests/e2e_world_client.py                     # real API + this cl
 Android: `godot --headless --path client --export-debug Android out.apk` (needs export
 templates, Android SDK build-tools and a debug keystore). A debug-signed APK must not
 be published as a release.
+
+## Android debug alpha (invite-only)
+
+The Android client is the only active platform for the alpha. Godot 4.6 is
+required to reproduce the build. Workflow
+[`Android alpha APK`](https://github.com/maillunex-lang/basheco/actions/workflows/android-alpha.yml)
+checks the Godot UI, navigation, and map, signs a debug build, and uploads a
+`BASHECO-Android-alpha-debug` artifact for 14 days. Signatures are temporary
+CI debug keys, **not** release credentials. A phone with an APK signed by a
+different key may need that existing installation removed; safeguard local data
+first. Use Android ARM64 hardware in landscape mode. The demo geography works
+without a game server; player login and persistent MMO gameplay require a
+separately tested HTTPS backend. Passing headless smoke tests does not replace
+real-device acceptance testing.
