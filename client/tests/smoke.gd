@@ -9,6 +9,10 @@ func _run() -> void:
     root.add_child(world)
     await process_frame
     assert(world.plots.size() == 6)
+    assert(world.geo_background.ready)
+    assert(world.geo_background.features.size() > 10)
+    assert(world.geo_background.manifest.get("license") == "ODbL 1.0")
+    assert(world.geo_background.to_tile([0.0, 0.0]) == Vector2(25.0, 25.0))
     assert(world.world_width == 200 and world.world_height == 200)
     var visible: Array[int] = world._visible_tile_bounds()
     assert(visible[2] - visible[0] < 200)
