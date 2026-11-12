@@ -4,7 +4,7 @@ const SOURCES := {
     "ufa": "res://data/ufa_projected_pilot.json",
     "mikhailovka": "res://data/mikhailovka_wide/manifest.json"
 }
-var metres_per_tile := 4.0  # Visual pilot only; not a surveyed gameplay scale.
+var metres_per_tile := 6.0  # Visual pilot only; not a surveyed gameplay scale.
 var origin_tile := Vector2(25.0, 25.0)
 const MAX_FEATURES := 10000
 const BUILDING_SPRITES := [preload("res://assets/kenney/building_45.png"), preload("res://assets/kenney/building_55.png"), preload("res://assets/kenney/building_115.png")]
@@ -18,18 +18,22 @@ var features: Array = []
 var cached_geometry: Array = []
 var terrain_segments: Array = []
 var terrain_range := Vector2.ZERO
+var settlement_boundary: Dictionary = {}
+var boundary_rings: Array = []
 var manifest: Dictionary = {}
 var ready := false
 
 func load_pilot(location_id: String = "ufa") -> void:
     ready = false
     origin_tile = Vector2(150.0, 180.0) if location_id == "mikhailovka" else Vector2(25.0, 25.0)
-    metres_per_tile = 6.0 if location_id == "mikhailovka" else 4.0
+    metres_per_tile = 6.0
     features.clear()
     cached_geometry.clear()
     geometry_index.clear()
     active_chunk_ids.clear()
     terrain_segments.clear()
+    settlement_boundary.clear()
+    boundary_rings.clear()
     terrain_range = Vector2.ZERO
     manifest.clear()
     if not SOURCES.has(location_id):
@@ -93,6 +97,7 @@ func load_pilot(location_id: String = "ufa") -> void:
                         geometry_index[key] = []
                     geometry_index[key].append(feature_index)
     _load_elevation(location_id)
+    _load_boundary(location_id)
     ready = true
 
 func _load_elevation(location_id: String) -> void:
@@ -146,12 +151,43 @@ func _load_elevation(location_id: String) -> void:
                     terrain_segments.append([crossings[2], crossings[3]])
 
 func tile_extent() -> Rect2:
+    if settlement_boundary.has("bbox_lonlat"):
+        var bounds: Array = settlement_boundary["bbox_lonlat"]
+        if bounds.size() == 4:
+            var a := lonlat_to_tile(float(bounds[0]), float(bounds[1]))
+            var b := lonlat_to_tile(float(bounds[2]), float(bounds[3]))
+            return Rect2(a.min(b), (b - a).abs())
     var metres: Array = manifest.get("bounds_m", [])
     if metres.size() != 4:
         return Rect2(origin_tile - Vector2(12, 12), Vector2(24, 24))
     var a := to_tile([float(metres[0]), float(metres[1])])
     var b := to_tile([float(metres[2]), float(metres[3])])
     return Rect2(a.min(b), (b - a).abs())
+
+func lonlat_to_tile(lon: float, lat: float) -> Vector2:
+    var origin_lon := float(manifest.get("origin_lon", 0.0))
+    var origin_lat := float(manifest.get("origin_lat", 0.0))
+    var east := 6378137.0 * deg_to_rad(lon - origin_lon) * cos(deg_to_rad(origin_lat))
+    var south := -6378137.0 * deg_to_rad(lat - origin_lat)
+    return to_tile([east, south])
+
+func _load_boundary(location_id: String) -> void:
+    var file := FileAccess.open("res://data/" + location_id + "_boundary.json", FileAccess.READ)
+    if file == null:
+        return
+    var data: Variant = JSON.parse_string(file.get_as_text())
+    if typeof(data) != TYPE_DICTIONARY or str(data.get("location_id", "")) != location_id:
+        return
+    if str(data.get("geometry", {}).get("type", "")) != "MultiPolygon":
+        return
+    settlement_boundary = data
+    for polygon in data["geometry"]["coordinates"]:
+        for ring in polygon:
+            var points := PackedVector2Array()
+            for coordinate in ring:
+                points.append(lonlat_to_tile(float(coordinate[0]), float(coordinate[1])))
+            if points.size() >= 3:
+                boundary_rings.append(points)
 
 func update_visible_chunks(bounds: Array[int]) -> void:
     active_chunk_ids.clear()
@@ -183,6 +219,13 @@ func render(world: Node2D, visible_bounds: Array[int]) -> void:
         if maxf(a.x, b.x) < visible_bounds[0] or minf(a.x, b.x) > visible_bounds[2] or maxf(a.y, b.y) < visible_bounds[1] or minf(a.y, b.y) > visible_bounds[3]:
             continue
         world.draw_line(world.project_point(a.x, a.y), world.project_point(b.x, b.y), Color("#91ae86", 0.48), 1.2, true)
+    for ring in boundary_rings:
+        for j in range(ring.size() - 1):
+            var a: Vector2 = ring[j]
+            var b: Vector2 = ring[j + 1]
+            if maxf(a.x, b.x) < visible_bounds[0] or minf(a.x, b.x) > visible_bounds[2] or maxf(a.y, b.y) < visible_bounds[1] or minf(a.y, b.y) > visible_bounds[3]:
+                continue
+            world.draw_line(world.project_point(a.x, a.y), world.project_point(b.x, b.y), Color("#e2bf72", 0.9), 2.0, true)
     var drawn_buildings := 0
     var drawn_trees := 0
     update_visible_chunks(visible_bounds)
