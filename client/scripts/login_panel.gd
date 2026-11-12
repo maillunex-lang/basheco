@@ -7,25 +7,32 @@ var email: LineEdit
 var password: LineEdit
 var status_label: Label
 var panel: PanelContainer
+var backdrop: ColorRect
 
 func _ready() -> void:
     api = get_parent().get_node("API")
     api.authenticated.connect(_on_authenticated)
     api.request_failed.connect(_on_error)
+    backdrop = ColorRect.new()
+    backdrop.color = Color("#101c28")
+    backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    add_child(backdrop)
     panel = PanelContainer.new()
-    panel.position = Vector2(18, 82)
-    panel.custom_minimum_size = Vector2(350, 0)
+    panel.custom_minimum_size = Vector2(390, 0)
     add_child(panel)
+    get_viewport().size_changed.connect(_layout)
+    call_deferred("_layout")
     var layout := VBoxContainer.new()
     layout.add_theme_constant_override("separation", 9)
     panel.add_child(layout)
     var title := Label.new()
-    title.text = "BASHECO · Вход в игру"
+    title.text = "BASHECO\nЭКОНОМИЧЕСКАЯ MMO"
     title.add_theme_font_size_override("font_size", 20)
     layout.add_child(title)
     endpoint = LineEdit.new()
     endpoint.placeholder_text = "Адрес игрового API (HTTPS)"
     endpoint.text = "https://rikagro.ru/basheco/api"
+    endpoint.visible = false
     layout.add_child(endpoint)
     display_name = LineEdit.new()
     display_name.placeholder_text = "Имя игрока"
@@ -49,11 +56,22 @@ func _ready() -> void:
     var demo_button := Button.new()
     demo_button.text = "Посмотреть карту без входа"
     demo_button.custom_minimum_size.y = 48
-    demo_button.pressed.connect(func(): panel.visible = false)
+    demo_button.pressed.connect(_preview_map)
     layout.add_child(demo_button)
     status_label = Label.new()
-    status_label.text = "Для доступа необходима учётная запись"
+    status_label.text = "Уфа · Закрытая Alpha 0.1"
     layout.add_child(status_label)
+
+func _layout() -> void:
+    var size := get_viewport().get_visible_rect().size
+    panel.position = Vector2((size.x - panel.size.x) * 0.5, maxf(24.0, (size.y - panel.size.y) * 0.5))
+
+func _preview_map() -> void:
+    panel.visible = false
+    backdrop.visible = false
+    get_parent().world_visible = true
+    get_parent().get_node("Navigation").show()
+    get_parent().queue_redraw()
 
 var registration_http: HTTPRequest
 
@@ -99,7 +117,11 @@ func _on_authenticated() -> void:
     status_label.text = "Вход выполнен"
     api.load_sector()
     panel.visible = false
+    backdrop.visible = false
+    get_parent().get_node("Navigation").show()
+    get_parent().queue_redraw()
 
 func _on_error(_code: int, message: String) -> void:
     status_label.text = message
     panel.visible = true
+    backdrop.visible = true
