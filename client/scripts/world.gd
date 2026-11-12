@@ -5,6 +5,7 @@ const GeoBackground = preload("res://scripts/geo_background.gd")
 var geo_background = GeoBackground.new()
 var current_location_id := "ufa"
 var ufa_saved_plots: Array[Dictionary] = []
+var ufa_saved_size := Vector2i(INITIAL_GRID_SIZE, INITIAL_GRID_SIZE)
 const INITIAL_GRID_SIZE := 200
 var world_width := INITIAL_GRID_SIZE
 var world_height := INITIAL_GRID_SIZE
@@ -57,7 +58,7 @@ func _ready() -> void:
     queue_redraw()
 
 func _focus_on_district() -> void:
-    var focus_tile := Vector2(25.0, 25.0) if current_location_id != "ufa" else Vector2(12.0, 12.0)
+    var focus_tile: Vector2 = geo_background.origin_tile if current_location_id != "ufa" else Vector2(12.0, 12.0)
     camera_offset = get_viewport_rect().size * 0.5 - iso(focus_tile.x, focus_tile.y) * zoom_level
     camera_initialized = true
     _camera_changed()
@@ -117,6 +118,7 @@ func _on_sector_loaded(data: Dictionary) -> void:
     var sector: Dictionary = data.get("sector", {})
     world_width = maxi(INITIAL_GRID_SIZE, int(sector.get("width_tiles", INITIAL_GRID_SIZE)))
     world_height = maxi(INITIAL_GRID_SIZE, int(sector.get("height_tiles", INITIAL_GRID_SIZE)))
+    ufa_saved_size = Vector2i(world_width, world_height)
     selected_plot = -1
     _update_hud()
     _camera_changed()
@@ -130,8 +132,12 @@ func open_location(location_id: String) -> bool:
     current_location_id = location_id
     if location_id == "ufa":
         plots = ufa_saved_plots.duplicate(true)
+        world_width = ufa_saved_size.x
+        world_height = ufa_saved_size.y
     else:
         plots.clear()
+        world_width = 320
+        world_height = 370
     selected_plot = -1
     world_visible = true
     _focus_on_district()
