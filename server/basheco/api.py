@@ -8,7 +8,7 @@ from uuid import UUID
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from psycopg import errors
 from basheco.db import connect
@@ -60,6 +60,28 @@ class TransferRequest(BaseModel):
     amount_kopecks: int = Field(strict=True, gt=0, le=10**15)
     idempotency_key: str = Field(min_length=8, max_length=128, pattern=r"^[a-zA-Z0-9._:-]+$")
 
+def throttle(bucket: str, identity: str, limit: int, window_seconds: int = 900) -> None:
+    """Atomic database-backed rate limit, independent of worker count.
+
+    Use the direct peer address only, not untrusted forwarded headers.
+    """
+    key_hash = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    with connect() as conn:
+        row = conn.execute(
+            "INSERT INTO request_limits(bucket,key_hash,window_start,attempts) "
+            "VALUES(%s,%s,now(),1) "
+            "ON CONFLICT (bucket,key_hash) DO UPDATE SET "
+            "attempts=CASE WHEN request_limits.window_start <= now() - (%s * interval '1 second') "
+            "THEN 1 ELSE request_limits.attempts+1 END, "
+            "window_start=CASE WHEN request_limits.window_start <= now() - (%s * interval '1 second') "
+            "THEN now() ELSE request_limits.window_start END "
+            "RETURNING attempts",
+            (bucket, key_hash, window_seconds, window_seconds),
+        ).fetchone()
+    if row["attempts"] > limit:
+        raise HTTPException(429, "Too many requests. Try again later.", headers={"Retry-After": str(window_seconds)})
+
+
 @app.get("/health")
 def health():
     try:
@@ -86,7 +108,8 @@ def current_user(authorization: str | None = Header(default=None)) -> str:
     return str(record["account_id"])
 
 @app.post("/v1/auth/register", status_code=201)
-def register(data: RegisterRequest):
+def register(data: RegisterRequest, request: Request):
+    throttle("register-ip", request.client.host if request.client else "unknown", 5, 900)
     hashed = ph.hash(data.password)
     try:
         with connect() as conn:
@@ -100,7 +123,10 @@ def register(data: RegisterRequest):
         raise HTTPException(409, "Account already exists")
 
 @app.post("/v1/auth/login")
-def login(data: LoginRequest):
+def login(data: LoginRequest, request: Request):
+    peer = request.client.host if request.client else "unknown"
+    throttle("login-ip", peer, 40, 900)
+    throttle("login-account", data.email.strip().lower(), 8, 900)
     with connect() as conn:
         user = conn.execute(
             "SELECT id,password_hash FROM accounts WHERE lower(email)=lower(%s)",
