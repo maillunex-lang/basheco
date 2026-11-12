@@ -27,6 +27,25 @@ background only and never become playable plots.
 Controls: drag with one finger or middle mouse button, pinch or mouse wheel to zoom,
 tap or left click to select a plot. Zoom range 0.004–2.4.
 
+## Administrative navigation (stage 1.2)
+
+The municipal selector uses the complete, versioned OKTMO registry, not the two
+settlements in the imported OSM atlas. Open the geography menu, choose a district
+or urban okrug, then a settlement. The search field finds settlements across the
+republic and within the selected municipality; namesakes are distinguished by
+type, unit, municipality and OKTMO code. Lists are paged for Android.
+
+- `data/admin_navigation.json` is generated from `server/geodata/admin/`:
+  **63 municipalities, 4,561 settlements**, with 4,538 confirmed destinations.
+- To regenerate at repository root: `python3 tools/export_navigation.py`.
+  The GitHub Action `navigation-catalog.yml` also updates this tracked file.
+- 23 destinations with missing or inconsistent coordinates remain in the catalog,
+  but cannot move the camera to an unverified position.
+- Most settlements do **not** yet have detailed OSM imagery. Navigation to them
+  works on the common grid; the generator of playable locations is a later stage.
+- Detailed verification and Android acceptance criteria:
+  `docs/STAGE_01_2_NAVIGATION.md`.
+
 ## Server
 
 Plots come from `GET /v1/world/viewport` in global world cells. The client refuses
@@ -37,8 +56,10 @@ never used to place anything.
 ## Tests
 
 ```sh
+python3 -m unittest discover -s server/tests -p test_navigation_catalog.py -v # official data checks
 godot --headless --path client -s tests/grid_parity.gd      # client math == server pyproj
 godot --headless --path client -s tests/smoke.gd            # world, streaming, travel, UI
+godot --headless --path client -s tests/navigation.gd       # all settlements, search, camera, invalid coordinates
 godot --headless --path client -s tests/streaming_soak.gd   # memory and chunk release
 python server/tests/e2e_world_client.py                     # real API + this client
 ```
