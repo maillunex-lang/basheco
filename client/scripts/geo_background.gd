@@ -13,6 +13,8 @@ const MAX_BUILDING_SPRITES := 140
 const GEOGRAPHY_CHUNK_TILES := 48
 const MAX_ACTIVE_CHUNKS := 48
 var geometry_index: Dictionary = {}
+var spatial_paths: Dictionary = {}
+var spatial_loaded: Dictionary = {}
 var active_chunk_ids: Array[Vector2i] = []
 var features: Array = []
 var cached_geometry: Array = []
@@ -30,6 +32,8 @@ func load_pilot(location_id: String = "ufa") -> void:
     features.clear()
     cached_geometry.clear()
     geometry_index.clear()
+    spatial_paths.clear()
+    spatial_loaded.clear()
     active_chunk_ids.clear()
     terrain_segments.clear()
     settlement_boundary.clear()
@@ -45,7 +49,10 @@ func load_pilot(location_id: String = "ufa") -> void:
     if typeof(data) != TYPE_DICTIONARY:
         return
     manifest = data.get("manifest", data)
-    if data.has("chunk_paths"):
+    if data.has("spatial_chunks"):
+        for entry in data["spatial_chunks"]:
+            spatial_paths[Vector2i(int(entry["x"]), int(entry["y"]))] = str(entry["path"])
+    elif data.has("chunk_paths"):
         for path in data["chunk_paths"]:
             var chunk_file := FileAccess.open(str(path), FileAccess.READ)
             if chunk_file == null:
@@ -65,6 +72,14 @@ func load_pilot(location_id: String = "ufa") -> void:
     if features.size() > MAX_FEATURES:
         features.clear()
         return
+    _rebuild_geometry()
+    _load_elevation(location_id)
+    _load_boundary(location_id)
+    ready = true
+
+func _rebuild_geometry() -> void:
+    cached_geometry.clear()
+    geometry_index.clear()
     for feature in features:
         var coords: Array = feature.get("points_m", [])
         if coords.size() < 2:
@@ -96,9 +111,6 @@ func load_pilot(location_id: String = "ufa") -> void:
                     if not geometry_index.has(key):
                         geometry_index[key] = []
                     geometry_index[key].append(feature_index)
-    _load_elevation(location_id)
-    _load_boundary(location_id)
-    ready = true
 
 func _load_elevation(location_id: String) -> void:
     var file := FileAccess.open("res://data/" + location_id + "_elevation_pilot.json", FileAccess.READ)
@@ -190,6 +202,9 @@ func _load_boundary(location_id: String) -> void:
                 boundary_rings.append(points)
 
 func update_visible_chunks(bounds: Array[int]) -> void:
+    if not spatial_paths.is_empty():
+        _refresh_spatial_chunks(bounds)
+        return
     active_chunk_ids.clear()
     var left := floori(float(bounds[0]) / GEOGRAPHY_CHUNK_TILES) - 1
     var top := floori(float(bounds[1]) / GEOGRAPHY_CHUNK_TILES) - 1
@@ -206,6 +221,56 @@ func update_visible_chunks(bounds: Array[int]) -> void:
         return Vector2(a).distance_squared_to(center) < Vector2(b).distance_squared_to(center))
     for i in range(mini(candidates.size(), MAX_ACTIVE_CHUNKS)):
         active_chunk_ids.append(candidates[i])
+
+func _refresh_spatial_chunks(bounds: Array[int]) -> void:
+    # Chunk keys are local projected metres; rendering uses one shared 6 m/tile scale.
+    var step := 256.0 / metres_per_tile
+    var left := floori((float(bounds[0]) - origin_tile.x) / step) - 1
+    var top := floori((float(bounds[1]) - origin_tile.y) / step) - 1
+    var right := floori((float(bounds[2]) - origin_tile.x) / step) + 1
+    var bottom := floori((float(bounds[3]) - origin_tile.y) / step) + 1
+    var center := Vector2((left + right) * 0.5, (top + bottom) * 0.5)
+    var desired: Array[Vector2i] = []
+    for cy in range(top, bottom + 1):
+        for cx in range(left, right + 1):
+            var key := Vector2i(cx, cy)
+            if spatial_paths.has(key):
+                desired.append(key)
+    desired.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+        return Vector2(a).distance_squared_to(center) < Vector2(b).distance_squared_to(center))
+    if desired.size() > MAX_ACTIVE_CHUNKS:
+        desired.resize(MAX_ACTIVE_CHUNKS)
+    var changed := desired.size() != active_chunk_ids.size()
+    if not changed:
+        for key in desired:
+            if not spatial_loaded.has(key):
+                changed = true
+                break
+    if not changed:
+        return
+    for key in spatial_loaded.keys():
+        if not desired.has(key):
+            spatial_loaded.erase(key)
+    for key in desired:
+        if spatial_loaded.has(key):
+            continue
+        var file := FileAccess.open(spatial_paths[key], FileAccess.READ)
+        if file == null:
+            push_warning("Missing geography chunk: " + str(key))
+            continue
+        var chunk: Variant = JSON.parse_string(file.get_as_text())
+        if typeof(chunk) == TYPE_DICTIONARY:
+            spatial_loaded[key] = chunk.get("features", [])
+    active_chunk_ids = desired
+    features.clear()
+    var unique: Dictionary = {}
+    for key in desired:
+        for feature in spatial_loaded.get(key, []):
+            var id := int(feature.get("id", -1))
+            if not unique.has(id):
+                unique[id] = true
+                features.append(feature)
+    _rebuild_geometry()
 
 func to_tile(point_m: Array) -> Vector2:
     return origin_tile + Vector2(float(point_m[0]), float(point_m[1])) / metres_per_tile
@@ -230,9 +295,13 @@ func render(world: Node2D, visible_bounds: Array[int]) -> void:
     var drawn_trees := 0
     update_visible_chunks(visible_bounds)
     var visible_features: Dictionary = {}
-    for key in active_chunk_ids:
-        for feature_index in geometry_index[key]:
+    if not spatial_paths.is_empty():
+        for feature_index in range(cached_geometry.size()):
             visible_features[feature_index] = true
+    else:
+        for key in active_chunk_ids:
+            for feature_index in geometry_index[key]:
+                visible_features[feature_index] = true
     for feature_index in visible_features:
         var item: Dictionary = cached_geometry[feature_index]
         var kind: String = item["kind"]
