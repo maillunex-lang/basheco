@@ -4,6 +4,7 @@ var world: Node2D
 var company_label: Label
 var district_label: Label
 var frame: PanelContainer
+var geo_credit: Label
 
 func _ready() -> void:
     world = get_parent()
@@ -41,6 +42,12 @@ func _ready() -> void:
     plus.custom_minimum_size = Vector2(44, 42)
     plus.pressed.connect(func(): world.zoom_at(get_viewport().get_visible_rect().size * 0.5, 1.2))
     row.add_child(plus)
+    geo_credit = Label.new()
+    geo_credit.text = "© OpenStreetMap contributors · ODbL 1.0 · География: пилот, не вся Уфа"
+    geo_credit.add_theme_color_override("font_color", Color("#dbe6e2"))
+    geo_credit.add_theme_font_size_override("font_size", 13)
+    geo_credit.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    add_child(geo_credit)
     get_parent().get_node("Company").companies_updated.connect(_companies_updated)
     get_viewport().size_changed.connect(_layout)
     _layout()
@@ -62,9 +69,17 @@ func _layout() -> void:
     frame.position = Vector2(10, 8)
     frame.custom_minimum_size = Vector2(maxf(400.0, size.x - 20.0), 52)
     district_label.visible = size.x > 780
+    if geo_credit != null:
+        geo_credit.position = Vector2(16, maxf(55.0, size.y - 100.0))
 
 func _companies_updated(companies: Array) -> void:
     if companies.is_empty():
         company_label.text = "Создайте компанию"
     else:
         company_label.text = str(companies[0].get("name", "Компания"))
+
+func update_geography_credit(location_id: String) -> void:
+    if geo_credit == null:
+        return
+    var place := "Михайловка" if location_id == "mikhailovka" else "Уфа"
+    geo_credit.text = "© OpenStreetMap contributors · ODbL 1.0 · " + place + " · фрагмент, не вся карта"
