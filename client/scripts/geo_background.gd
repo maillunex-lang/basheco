@@ -138,6 +138,7 @@ func render(world: Node2D, visible_bounds: Array[int]) -> void:
             continue
         world.draw_line(world.project_point(a.x, a.y), world.project_point(b.x, b.y), Color("#91ae86", 0.48), 1.2, true)
     var drawn_buildings := 0
+    var drawn_trees := 0
     for item in cached_geometry:
         var kind: String = item["kind"]
         var min_tile: Vector2 = item["minimum"]
@@ -171,12 +172,19 @@ func render(world: Node2D, visible_bounds: Array[int]) -> void:
                 if points.size() >= 3 and points[0].distance_to(points[points.size() - 1]) < 1.0:
                     world.draw_colored_polygon(points, Color("#36734c", 0.3))
                 world.draw_polyline(points, Color("#4b9164", 0.8), 2.0, true)
-                if world.zoom_level >= 0.85:
-                    var tile_center := (min_tile + max_tile) * 0.5
-                    if Geometry2D.is_point_in_polygon(tile_center, item["tiles"]):
-                        var anchor: Vector2 = world.project_point(tile_center.x, tile_center.y)
-                        var sprite_width: float = 28.0 * world.zoom_level
-                        world.draw_texture_rect(TREE_SPRITE, Rect2(anchor.x - sprite_width * 0.5, anchor.y - sprite_width, sprite_width, sprite_width), false)
+                if world.zoom_level >= 0.85 and drawn_trees < 60:
+                    var forest_tiles: PackedVector2Array = item["tiles"]
+                    for gx in range(int(ceil(min_tile.x / 8.0)), int(floor(max_tile.x / 8.0)) + 1):
+                        for gy in range(int(ceil(min_tile.y / 8.0)), int(floor(max_tile.y / 8.0)) + 1):
+                            if drawn_trees >= 60:
+                                break
+                            var tree_tile := Vector2(float(gx) * 8.0, float(gy) * 8.0)
+                            if not Geometry2D.is_point_in_polygon(tree_tile, forest_tiles):
+                                continue
+                            var anchor: Vector2 = world.project_point(tree_tile.x, tree_tile.y)
+                            var sprite_width: float = 28.0 * world.zoom_level
+                            world.draw_texture_rect(TREE_SPRITE, Rect2(anchor.x - sprite_width * 0.5, anchor.y - sprite_width, sprite_width, sprite_width), false)
+                            drawn_trees += 1
             "farmland":
                 if points.size() >= 3 and points[0].distance_to(points[points.size() - 1]) < 1.0:
                     world.draw_colored_polygon(points, Color("#a3ad63", 0.24))
