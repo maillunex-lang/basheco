@@ -139,6 +139,8 @@ func _select_at(point: Vector2) -> void:
             selected_plot = i
             break
     _update_hud()
+    if selected_plot >= 0:
+        $Economy.choose_plot(plots[selected_plot])
     $OSM.refresh()
     queue_redraw()
 
