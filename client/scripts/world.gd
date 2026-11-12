@@ -60,6 +60,10 @@ func _ready() -> void:
     get_viewport().size_changed.connect(_on_viewport_resized)
     queue_redraw()
 
+func _process(_delta: float) -> void:
+    if world_visible and geo_background.process_pending_chunks():
+        queue_redraw()
+
 func _focus_on_district() -> void:
     var focus_tile: Vector2 = geo_background.origin_tile if current_location_id != "ufa" else Vector2(12.0, 12.0)
     camera_offset = get_viewport_rect().size * 0.5 - iso(focus_tile.x, focus_tile.y) * zoom_level
@@ -227,8 +231,8 @@ func _visible_tile_bounds() -> Array[int]:
     return [
         clampi(int(floor(min_x)) - 2, world_min_x, world_width),
         clampi(int(floor(min_y)) - 2, world_min_y, world_height),
-        clampi(int(ceil(max_x)) + 3, 0, world_width),
-        clampi(int(ceil(max_y)) + 3, 0, world_height)
+        clampi(int(ceil(max_x)) + 3, world_min_x, world_width),
+        clampi(int(ceil(max_y)) + 3, world_min_y, world_height)
     ]
 
 func _tile(x: int, y: int, color: Color) -> void:
