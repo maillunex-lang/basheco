@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 from basheco.db import connect
-from basheco.api import TransferRequest, transfer
+from basheco.api import TransferRequest, transfer, throttle
 from basheco.migrate import main as migrate
 
 @unittest.skipUnless(os.environ.get("BASHECO_TEST_DATABASE_URL"), "No disposable integration database")
@@ -96,6 +96,31 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(sum(isinstance(r,dict) for r in results),1)
         self.assertIn(409,results)
         self.assertEqual(self.balances(),[200,800])
+
+
+    def test_rate_limit_enforced(self):
+        identity = str(uuid4())
+        throttle("integration-test", identity, 2, 900)
+        throttle("integration-test", identity, 2, 900)
+        with self.assertRaises(HTTPException) as ctx:
+            throttle("integration-test", identity, 2, 900)
+        self.assertEqual(ctx.exception.status_code, 429)
+        with connect() as conn:
+            conn.execute("DELETE FROM request_limits WHERE bucket=%s", ("integration-test",))
+
+    def test_expired_session_and_counter_cleanup(self):
+        from basheco.maintenance import cleanup
+        from hashlib import sha256
+        marker = sha256(str(uuid4()).encode()).hexdigest()
+        with connect() as conn:
+            conn.execute("INSERT INTO sessions(token_hash,account_id,expires_at) VALUES(%s,%s,now()-interval '1 day')", (marker,self.a))
+            conn.execute("INSERT INTO request_limits(bucket,key_hash,window_start,attempts) VALUES(%s,%s,now()-interval '3 days',1)", ("integration-cleanup",marker))
+        result = cleanup()
+        self.assertGreaterEqual(result["expired_sessions"],1)
+        self.assertGreaterEqual(result["old_rate_limits"],1)
+        with connect() as conn:
+            self.assertIsNone(conn.execute("SELECT token_hash FROM sessions WHERE token_hash=%s", (marker,)).fetchone())
+            self.assertIsNone(conn.execute("SELECT bucket FROM request_limits WHERE bucket=%s AND key_hash=%s", ("integration-cleanup",marker)).fetchone())
 
     def test_foreign_wallet_rejected(self):
         with self.assertRaises(HTTPException) as ctx:
