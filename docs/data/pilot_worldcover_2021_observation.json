@@ -1,0 +1,27 @@
+{
+  "schema": "basheco.worldcover_pilot_observation/1",
+  "settlement_id": "S80652440101",
+  "source": "ESA WorldCover 2021 v200 Map",
+  "source_url": "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_N54E054_Map.tif",
+  "tile": "N54E054",
+  "source_crs": "EPSG:4326",
+  "source_resolution_metres": 10,
+  "download_sha256": "77dfa16f2ad2cbdec2ee2977c7475d69fb54a09c11f7d713bae3ca61e8f3f291",
+  "world_grid_crs": "EPSG:32640",
+  "world_cell_metres": 6,
+  "occupied_cells": 127,
+  "detected_permanent_water_cells": 0,
+  "water_unknown_cells": 127,
+  "terrain_verified": false,
+  "protected_areas_verified": false,
+  "land_rights_verified": false,
+  "safe_to_publish": false,
+  "method": "All raster pixels touched by each 6m generated footprint cell; class 80 is permanent water, non-water classes remain unknown",
+  "limitations": [
+    "WorldCover 2021 land cover is not a current water or flood map",
+    "10m resolution cannot rule out narrow watercourses and seasonal water",
+    "No DEM, protected area or land rights data",
+    "Raster retained only in temporary isolated analysis storage, not committed to Git"
+  ],
+  "attribution": "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"
+}
