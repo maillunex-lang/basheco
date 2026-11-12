@@ -54,7 +54,7 @@ def produce(data: ProduceRequest, account_id: str):
             "JOIN world_plots p ON p.id=b.plot_id WHERE b.id=%s",
             (data.building_id,),
         ).fetchone()
-        if building["sector_id"]!="ufa-prototype-01":
+        if building["sector_id"] not in ("ufa", "mikhailovka"):
             raise HTTPException(403,"Production outside prototype disabled")
         recipe=conn.execute(
             "SELECT code,building_type,input_resource,input_quantity,output_resource,"
