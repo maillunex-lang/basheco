@@ -35,6 +35,17 @@ func _run() -> void:
     market._set_companies([{"id":"test-company-2", "name":"Другая компания"}, {"id":"test-company-1", "name":"Тестовая компания"}])
     assert(market._selected_company_id() == "test-company-2")
     assert(world.get_node("Login").display_name != null)
+    var hud = world.get_node("HUD")
+    assert(hud.company_label.text == "Компания не выбрана")
+    hud._companies_updated([{"name":"Тестовая компания"}])
+    assert(hud.company_label.text == "Тестовая компания")
+    var anchor := Vector2(360, 220)
+    var local_before: Vector2 = (anchor - world.camera_offset) / world.zoom_level
+    world.zoom_at(anchor, 1.25)
+    var local_after: Vector2 = (anchor - world.camera_offset) / world.zoom_level
+    assert(local_before.distance_to(local_after) < 0.01)
+    world._focus_on_district()
+    assert(world.zoom_level >= world.MIN_ZOOM and world.zoom_level <= world.MAX_ZOOM)
     var nav = world.get_node("Navigation")
     nav._show_section("Build")
     assert(build_panel.panel.visible)
