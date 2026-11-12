@@ -41,6 +41,7 @@ const ZONE_ICONS := {
 var hud: Label
 
 func _ready() -> void:
+    ufa_saved_plots = plots.duplicate(true)
     geo_background.load_pilot()
     _focus_on_district()
     hud = Label.new()
