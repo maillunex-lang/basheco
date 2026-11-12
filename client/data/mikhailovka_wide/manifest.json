@@ -16,8 +16,9 @@
   ],
   "feature_counts": {
     "road": 683,
-    "building": 743,
-    "water": 1
+    "building": 761,
+    "forest": 1,
+    "water": 2
   },
   "elevation_source": null,
   "elevation_status": "not_available",
