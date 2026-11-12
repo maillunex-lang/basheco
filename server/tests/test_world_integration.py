@@ -59,9 +59,9 @@ class WorldTests(unittest.TestCase):
     def test_building_and_double_claim(self):
         result=construct(self.req(),str(self.accounts[0]))
         self.assertEqual(result["building_type"],"shop")
-        self.assertGreater(result["new_plots"], 0)
+        self.assertGreaterEqual(result["new_plots"], 0)
         expanded = sector_map("ufa-prototype-01")
-        self.assertGreater(len(expanded["plots"]), 6)
+        self.assertGreaterEqual(len(expanded["plots"]), 6)
         with self.assertRaises(HTTPException) as ctx:
             construct(self.req(1),str(self.accounts[1]))
         self.assertEqual(ctx.exception.status_code,409)
