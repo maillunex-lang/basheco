@@ -15,7 +15,7 @@ from basheco.land_constraints import assess_cells, footprint_cells
 from basheco.world_grid import CELL_METRES, cell_to_metre_corner
 
 
-def audit(root: Path = DEFAULT_ROOT) -> dict:
+def audit(root: Path = DEFAULT_ROOT, worldcover_path: Path | None = None) -> dict:
     bundle = build(root)
     municipalities = {m["id"]: m for m in json.loads(
         (root / "municipalities.json").read_text(encoding="utf-8"))["municipalities"]}
@@ -48,7 +48,11 @@ def audit(root: Path = DEFAULT_ROOT) -> dict:
                     problems.append({"kind": obj["kind"], "cell": [x, y],
                                      "sample_m": [px, py]})
                     break
-        land = assess_cells(footprint_cells(location), None)
+        evidence = None
+        if worldcover_path is not None and selection["settlement_id"] == "S80652440101":
+            from basheco.worldcover_source import worldcover_evidence
+            evidence = worldcover_evidence(footprint_cells(location), worldcover_path)
+        land = assess_cells(footprint_cells(location), evidence)
         results.append({"settlement_id": selection["settlement_id"],
                         "municipality_id": mid,
                         "sampled_points": checked,
@@ -78,8 +82,10 @@ def main() -> None:
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--pilot-worldcover", type=Path,
+                        help="Local ESA WorldCover 2021 v200 GeoTIFF for pilot only")
     args = parser.parse_args()
-    report = audit()
+    report = audit(worldcover_path=args.pilot_worldcover)
     data = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
