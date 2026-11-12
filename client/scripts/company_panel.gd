@@ -40,7 +40,6 @@ func _ready() -> void:
     status_label.text = "Войдите в игру"
     layout.add_child(status_label)
     panel.visible = false
-    api.authenticated.connect(func(): panel.visible = true)
 
 func _create() -> void:
     if busy or api.access_token.is_empty() or name_field.text.strip_edges().length() < 2:
