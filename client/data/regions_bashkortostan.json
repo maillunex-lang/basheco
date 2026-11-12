@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "region": {
+    "id": "bashkortostan",
+    "name": "Республика Башкортостан",
+    "center": [
+      55.9587,
+      54.7351
+    ]
+  },
+  "districts": [
+    {
+      "id": "ufa_city",
+      "name": "Городской округ город Уфа",
+      "kind": "urban_okrug",
+      "locations": [
+        {
+          "id": "ufa",
+          "name": "Уфа",
+          "kind": "city",
+          "center": [
+            55.9587,
+            54.7351
+          ],
+          "sector_id": "ufa-prototype-01",
+          "playable": true
+        }
+      ]
+    },
+    {
+      "id": "ufimsky",
+      "name": "Уфимский район",
+      "kind": "municipal_district",
+      "locations": [
+        {
+          "id": "mikhailovka",
+          "name": "Михайловка",
+          "kind": "village",
+          "center": [
+            55.895,
+            54.803
+          ],
+          "playable": false
+        }
+      ]
+    }
+  ],
+  "coverage": "navigation_prototype",
+  "notice": "Прототип навигации: неполный перечень районов и населённых пунктов; административные границы и точные координаты требуют сверки с OSM/официальными реестрами."
+}
