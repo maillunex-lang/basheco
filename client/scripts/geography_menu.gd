@@ -171,7 +171,7 @@ func _enter_location(item: Dictionary) -> void:
         return
     var parent := get_parent()
     if parent.has_method("open_world_cell"):
-        parent.open_world_cell(Vector2i(int(cell[0]), int(cell[1])), str(item.get("name", ""))):
+        if parent.open_world_cell(Vector2i(int(cell[0]), int(cell[1])), str(item.get("name", ""))):
             hide()
 
 func _back() -> void:
