@@ -222,6 +222,19 @@ func _draw() -> void:
             var icon_size := 44.0 * zoom_level
             draw_texture_rect(icon, Rect2(center - Vector2(icon_size * 0.5, icon_size * 0.8), Vector2(icon_size, icon_size)), false)
         draw_circle(center, 3.0, Color.WHITE)
+        if i == selected_plot and p.get("building_id") != null:
+            # Selected building: visible outline even when icon texture is small.
+            var left := float(p["tile_x"])
+            var top := float(p["tile_y"])
+            var right := left + float(p["width_tiles"])
+            var bottom := top + float(p["height_tiles"])
+            var outline := PackedVector2Array([
+                project_point(left, top), project_point(right, top),
+                project_point(right, bottom), project_point(left, bottom),
+                project_point(left, top)
+            ])
+            draw_polyline(outline, Color("#ffed83"), 3.5, true)
+            draw_circle(center, 7.0 * zoom_level, Color("#ffed83", 0.85))
 
 func _visible_tile_bounds() -> Array[int]:
     var screen := get_viewport_rect().size
