@@ -356,7 +356,7 @@ func render(world: Node2D, visible_bounds: Array[int]) -> void:
                     var sprite_index := posmod(int(absf(center.x * 17.0 + center.y * 31.0)), BUILDING_SPRITES.size())
                     var texture: Texture2D = BUILDING_SPRITES[sprite_index]
                     var sprite_height: float = sprite_width * float(texture.get_height()) / float(texture.get_width())
-                    world.draw_texture_rect(texture, Rect2(anchor.x - sprite_width * 0.5, anchor.y - sprite_height * 0.8, sprite_width, sprite_height), false)
+                    world.draw_texture_rect(texture, Rect2(anchor.x - sprite_width * 0.5, anchor.y - sprite_height * 0.8, sprite_width, sprite_height), false, Color(1, 1, 1, 0.12) if world.fade_occluding_buildings else Color.WHITE)
                     drawn_buildings += 1
             "water":
                 if points.size() >= 3 and points[0].distance_to(points[points.size() - 1]) < 1.0:
