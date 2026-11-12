@@ -1,11 +1,13 @@
-"""Deterministic, local geodata projection and clipping for settlement backgrounds.
+"""LEGACY local projection, kept only to convert pre-stage-1 data.
 
-Input geometry is WGS84 lon/lat, output coordinates are metres relative to a
-location-specific origin. Game plots remain separate and are not inferred from OSM.
+Before stage 1 every settlement had its own equirectangular origin. The world
+now uses one EPSG:32640 grid (world_grid.py / world_projection.py). Nothing new
+may be built on LocalProjection: it exists so that world_compat.py can map old
+settlement-local plot coordinates back to WGS84 exactly as the old client drew them.
 """
 from __future__ import annotations
 from dataclasses import dataclass
-from math import cos, radians, pi, isfinite
+from math import cos, radians, degrees, isfinite
 
 EARTH_RADIUS_M = 6378137.0
 
@@ -26,6 +28,14 @@ class LocalProjection:
         x = EARTH_RADIUS_M * radians(lon - self.origin_lon) * cos(radians(self.origin_lat))
         y = -EARTH_RADIUS_M * radians(lat - self.origin_lat)
         return x, y
+
+    def unproject(self, x: float, y: float) -> tuple[float, float]:
+        """Exact inverse of project(): local metres -> WGS84 lon, lat."""
+        if not (isfinite(x) and isfinite(y)):
+            raise ValueError("Invalid local coordinates")
+        lon = self.origin_lon + degrees(x / (EARTH_RADIUS_M * cos(radians(self.origin_lat))))
+        lat = self.origin_lat - degrees(y / EARTH_RADIUS_M)
+        return lon, lat
 
 
 def clip_segment(a: tuple[float, float], b: tuple[float, float],

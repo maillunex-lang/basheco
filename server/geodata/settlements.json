@@ -1,0 +1,10 @@
+{
+  "schema": "basheco.settlements/1",
+  "note": "Settlements are regions inside ONE world grid. They never define their own coordinate origin. focus is derived from sourced extracts, it is not an official city centre.",
+  "settlements": [
+    {"id": "ufa", "name": "Уфа", "kind": "city", "sources": ["ufa-center-osm"],
+     "boundary": "boundaries/ufa.json", "elevation": "elevation/ufa.json"},
+    {"id": "mikhailovka", "name": "Михайловка", "kind": "village", "sources": ["mikhailovka-osm"],
+     "boundary": "boundaries/mikhailovka.json", "elevation": "elevation/mikhailovka.json"}
+  ]
+}
