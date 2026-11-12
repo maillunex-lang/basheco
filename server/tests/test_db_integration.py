@@ -43,6 +43,7 @@ class IntegrationTests(unittest.TestCase):
 
     def tearDown(self):
         with connect() as conn:
+            conn.execute("DELETE FROM security_audit WHERE actor_account_id=ANY(%s::uuid[])", ([self.a,self.b],))
             conn.execute("DELETE FROM ledger_postings WHERE wallet_id=ANY(%s::uuid[])", ([self.wa,self.wb],))
             conn.execute("DELETE FROM ledger_transfers WHERE initiated_by=ANY(%s::uuid[])", ([self.a,self.b],))
             conn.execute("DELETE FROM wallets WHERE id=ANY(%s::uuid[])", ([self.wa,self.wb],))
@@ -69,6 +70,9 @@ class IntegrationTests(unittest.TestCase):
         with connect() as conn:
             postings = conn.execute("SELECT delta_kopecks FROM ledger_postings WHERE transfer_id=%s", (first["transfer_id"],)).fetchall()
         self.assertEqual(sorted(x["delta_kopecks"] for x in postings), [-125,125])
+        with connect() as conn:
+            audit = conn.execute("SELECT count(*) AS n FROM security_audit WHERE event_type=%s AND subject_id=%s", ("wallet.transfer",first["transfer_id"])).fetchone()["n"]
+        self.assertEqual(audit,1)
         with self.assertRaises(HTTPException) as ctx:
             transfer(self.request(126,request.idempotency_key),str(self.a))
         self.assertEqual(ctx.exception.status_code,409)
