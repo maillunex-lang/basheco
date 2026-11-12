@@ -1,6 +1,9 @@
 """Stage 1 loopback API. Not ready for public exposure."""
 from __future__ import annotations
 import hashlib
+import hmac
+import ipaddress
+import os
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -60,6 +63,20 @@ class TransferRequest(BaseModel):
     amount_kopecks: int = Field(strict=True, gt=0, le=10**15)
     idempotency_key: str = Field(min_length=8, max_length=128, pattern=r"^[a-zA-Z0-9._:-]+$")
 
+def client_identity(request: Request) -> str:
+    """Trust client IP only with a matching private reverse-proxy secret."""
+    peer = request.client.host if request.client else "unknown"
+    secret = os.environ.get("BASHECO_PROXY_SECRET", "")
+    supplied = request.headers.get("x-basheco-proxy-secret", "")
+    if secret and supplied and hmac.compare_digest(secret, supplied):
+        forwarded = request.headers.get("x-basheco-client-ip", "")
+        try:
+            return str(ipaddress.ip_address(forwarded))
+        except ValueError:
+            pass
+    return peer
+
+
 def throttle(bucket: str, identity: str, limit: int, window_seconds: int = 900) -> None:
     """Atomic database-backed rate limit, independent of worker count.
 
@@ -109,7 +126,7 @@ def current_user(authorization: str | None = Header(default=None)) -> str:
 
 @app.post("/v1/auth/register", status_code=201)
 def register(data: RegisterRequest, request: Request):
-    throttle("register-ip", request.client.host if request.client else "unknown", 5, 900)
+    throttle("register-ip", client_identity(request), 5, 900)
     hashed = ph.hash(data.password)
     try:
         with connect() as conn:
@@ -125,7 +142,7 @@ def register(data: RegisterRequest, request: Request):
 
 @app.post("/v1/auth/login")
 def login(data: LoginRequest, request: Request):
-    peer = request.client.host if request.client else "unknown"
+    peer = client_identity(request)
     throttle("login-ip", peer, 40, 900)
     throttle("login-account", data.email.strip().lower(), 8, 900)
     with connect() as conn:
