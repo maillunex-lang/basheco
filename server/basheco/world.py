@@ -1,6 +1,6 @@
-"""Server-authoritative prototype world operations.
+"""Server-authoritative settlement world operations.
 
-Plot claiming is free ONLY in the isolated prototype sector.
+Legacy prototype plots have been removed from the active world.
 Production land acquisition will require a separate economic transaction.
 """
 from uuid import UUID
@@ -125,8 +125,8 @@ def construct(data: ConstructRequest, account_id: str):
         ).fetchone()
         if not plot:
             raise HTTPException(404, "Plot not found")
-        if plot["sector_id"] != "ufa-prototype-01":
-            raise HTTPException(403, "Construction outside prototype is disabled")
+        if plot["sector_id"] not in ("ufa", "mikhailovka"):
+            raise HTTPException(403, "Construction outside active settlements is disabled")
         if plot["owner_company_id"] is not None:
             raise HTTPException(409, "Plot already occupied")
         building_type = conn.execute(
@@ -160,6 +160,6 @@ def construct(data: ConstructRequest, account_id: str):
              plot["tile_x"] + plot["width_tiles"],
              plot["tile_y"] + plot["height_tiles"]),
         )
-        new_plots = grow_district(conn, plot)
+        new_plots = 0  # New plots are explicitly created, never spawned around a building.
         return {"new_plots": new_plots, "building_id": str(building["id"]), "plot_id": str(data.plot_id),
                 "company_id": str(data.company_id), "building_type": data.building_type}
