@@ -227,8 +227,10 @@ func _run() -> void:
     var nav_panel = world.get_node("Navigation")
     nav_panel._show_section("Build")
     check(build_panel.panel.visible and not market.panel.visible, "navigation opens build")
+    check(nav_panel.active_section == "Build" and nav_panel.buttons["Build"].tooltip_text == "Стройка", "build navigation selected and labelled")
     nav_panel._show_section("")
     check(not build_panel.panel.visible, "navigation closes panels")
+    check(nav_panel.active_section == "" and nav_panel.buttons[""].tooltip_text == "Карта", "map navigation selected")
     var chunks = load("res://scripts/city_chunks.gd")
     check(chunks.chunk_for_tile(63, 63) == Vector2i(0, 0) and chunks.chunk_for_tile(64, 64) == Vector2i(1, 1) and chunks.chunk_for_tile(-1, -1) == Vector2i(-1, -1), "plot chunk helper")
     var one_chunk: Array[int] = [0, 0, 64, 64]
