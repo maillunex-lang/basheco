@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/api_client.gd" id="2_api"]
@@ -14,6 +14,8 @@
 [ext_resource type="Script" path="res://scripts/company_panel.gd" id="7_company"]
 
 [ext_resource type="Script" path="res://scripts/game_nav.gd" id="8_nav"]
+
+[ext_resource type="Script" path="res://scripts/build_panel.gd" id="9_build"]
 
 [node name="World" type="Node2D"]
 script = ExtResource("1_world")
@@ -38,3 +40,6 @@ script = ExtResource("7_company")
 
 [node name="Navigation" type="CanvasLayer" parent="."]
 script = ExtResource("8_nav")
+
+[node name="Build" type="CanvasLayer" parent="."]
+script = ExtResource("9_build")
