@@ -1,0 +1,67 @@
+{
+ "schema": "basheco.geo_dataset_version/1",
+ "dataset_version": "bashkortostan-admin/2026-01-01/r1",
+ "target_reference_date": "2026-01-01",
+ "actual_state": "границы и перечень отражают OSM и Wikidata на дату загрузки (см. sources.json), а не официальный срез на 1 января 2026 года",
+ "verification": {
+  "official_oktmo_file_compared": false,
+  "municipality_count_confirmed_by_primary_legal_source": false,
+  "note": "Сайт Росстата недоступен из среды сборки. До сверки с официальным файлом ОКТМО полнота перечня и официальность названий не подтверждены"
+ },
+ "counts": {
+  "municipalities": 63,
+  "municipalities_by_type": {
+   "городской округ": 9,
+   "муниципальный район": 54
+  },
+  "settlements": 4557,
+  "with_coordinates": 4555,
+  "coordinates_confirmed": 4539,
+  "with_population": 4550,
+  "settlements_by_type": {
+   "город": 21,
+   "деревня": 2879,
+   "населённый пункт": 3,
+   "посёлок": 8,
+   "рабочий посёлок": 2,
+   "село": 1566,
+   "хутор": 78
+  },
+  "issues": {
+   "coordinates_rejected": 2,
+   "municipality_code_inferred": 1,
+   "name_from_municipal_unit": 1,
+   "name_normalised": 1,
+   "outside_boundary": 16,
+   "possibly_abolished": 1,
+   "several_coordinates": 62,
+   "type_unclear": 3
+  }
+ },
+ "boundaries": {
+  "levels": {
+   "overview": {
+    "tolerance_m": 200.0,
+    "points": 10092,
+    "ways_kept_unsimplified": 2
+   },
+   "detail": {
+    "tolerance_m": 40.0,
+    "points": 20051,
+    "ways_kept_unsimplified": 0
+   },
+   "source": {
+    "points": 54604
+   }
+  },
+  "shared_ways": 1485,
+  "region_area_km2": 142924.7,
+  "sum_of_municipal_areas_km2": 142924.7
+ },
+ "grid": {
+  "crs": "EPSG:32640",
+  "grid_version": "basheco-grid/1",
+  "cell_metres": 6
+ },
+ "names": "только официальные русские названия; другие языки на этом этапе не ведутся"
+}

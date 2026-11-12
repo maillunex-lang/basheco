@@ -13,6 +13,7 @@ Persistent economic MMO in Bashkortostan, Russia.
 - server/basheco/world_grid.py, world_projection.py: authoritative world grid (WGS84 → EPSG:32640 → cell → chunk).
 - server/basheco/osm_source.py, world_atlas.py, server/geodata/: real OSM sources → client/data/world atlas.
 - server/basheco/world_compat.py, sql/015_world_grid_link.sql: legacy settlement-local plots placed on the world grid.
+- server/basheco/geo_registry.py, server/geodata/admin/: administrative registry of Bashkortostan (63 municipalities, settlements, boundaries); see docs/STAGE_01_2_GEO_REGISTRY.md.
 - client/: Godot 4 client, one seamless map (see client/README.md).
 
 ## Running locally on a dedicated test host

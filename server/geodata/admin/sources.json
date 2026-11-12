@@ -1,0 +1,41 @@
+{
+ "schema": "basheco.geo_sources/1",
+ "sources": [
+  {
+   "id": "osm-admin-boundaries",
+   "title": "OpenStreetMap: административные границы",
+   "url": "https://api.openstreetmap.org/api/0.6/relation/77677/full и 63 вложенных отношения (subarea, admin_level=6)",
+   "retrieved_utc": [
+    "2026-11-12T11:41:03Z",
+    "2026-11-12T11:42:53Z"
+   ],
+   "license": "ODbL 1.0",
+   "attribution": "© OpenStreetMap contributors",
+   "raw_sha256": {
+    "rb_full.xml": "18ee1f7a2ecb8d4592f1a4abb5d855136f1a2759dea9f7f9fdadc98156d0f3e0",
+    "relations": "7c517daa3ebb58b8b900f960b49562eef2139f1074a9fd3dd1c8af57b468ec69"
+   },
+   "reflects": "состояние карты OSM на момент загрузки, не официальный реестр"
+  },
+  {
+   "id": "wikidata-units",
+   "title": "Wikidata: населённые пункты и муниципальные единицы с кодами ОКТМО",
+   "url": "https://query.wikidata.org/sparql",
+   "retrieved_utc": "2026-11-12T11:43:54Z",
+   "license": "CC0 1.0",
+   "raw_sha256": {
+    "wd_items.json": "1d91bf6848402ff65f1b40c6607e54dacac2f1697426e9fd5671af5f41a3dfe2",
+    "wd_population.json": "e62e65050624c3cecbae2edd0609b4df6b64d96447c57180137c35773ad3e42d"
+   },
+   "reflects": "данные Wikidata на момент запроса; коды ОКТМО и население внесены участниками со ссылками на Росстат"
+  },
+  {
+   "id": "oktmo-rosstat",
+   "title": "ОКТМО, Росстат (официальный классификатор)",
+   "url": "https://rosstat.gov.ru/opendata/7708234640-oktmo",
+   "retrieved_utc": null,
+   "license": null,
+   "status": "НЕ ПОЛУЧЕН: сайт Росстата недоступен из среды сборки. Сверка с официальным файлом не выполнена"
+  }
+ ]
+}
