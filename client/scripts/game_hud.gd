@@ -5,6 +5,8 @@ var company_label: Label
 var district_label: Label
 var frame: PanelContainer
 var geo_credit: Label
+var performance_label: Label
+var performance_elapsed := 0.0
 
 func _ready() -> void:
     world = get_parent()
@@ -48,10 +50,28 @@ func _ready() -> void:
     geo_credit.add_theme_font_size_override("font_size", 13)
     geo_credit.mouse_filter = Control.MOUSE_FILTER_IGNORE
     add_child(geo_credit)
+    performance_label = Label.new()
+    performance_label.add_theme_font_size_override("font_size", 12)
+    performance_label.add_theme_color_override("font_color", Color("#a9d6d0"))
+    performance_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    performance_label.visible = OS.has_feature("debug")
+    add_child(performance_label)
     get_parent().get_node("Company").companies_updated.connect(_companies_updated)
     get_viewport().size_changed.connect(_layout)
     _layout()
     hide()
+
+func _process(delta: float) -> void:
+    if not performance_label.visible or not world.world_visible:
+        return
+    performance_elapsed += delta
+    if performance_elapsed < 1.0:
+        return
+    performance_elapsed = 0.0
+    var fps := Performance.get_monitor(Performance.TIME_FPS)
+    var memory_mb := Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0
+    var active := world.geo_background.active_chunk_ids.size()
+    performance_label.text = "FPS: %d  |  Godot RAM: %.1f MB  |  чанков: %d  |  масштаб: %.2f×" % [int(fps), memory_mb, active, world.zoom_level]
 
 func _surface() -> StyleBoxFlat:
     var style := StyleBoxFlat.new()
@@ -71,6 +91,8 @@ func _layout() -> void:
     district_label.visible = size.x > 780
     if geo_credit != null:
         geo_credit.position = Vector2(16, maxf(55.0, size.y - 100.0))
+    if performance_label != null:
+        performance_label.position = Vector2(16, maxf(76.0, size.y - 78.0))
 
 func _companies_updated(companies: Array) -> void:
     if companies.is_empty():
