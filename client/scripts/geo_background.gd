@@ -374,9 +374,11 @@ func render_sprites(world: Node2D, canvas: CanvasItem) -> void:
     var bounds: Array[int] = world.visible_cell_bounds()
     var drawn_buildings := 0
     var drawn_trees := 0
+    var decorations: Array[Dictionary] = []
     var nodes: Array = static_nodes.duplicate()
     for key in active_chunk_ids:
-        nodes.append(loaded[key])
+        if loaded.has(key):
+            nodes.append(loaded[key])
     for node in nodes:
         var anchor: Vector2i = node.anchor_cell
         var low := Vector2(float(bounds[0] - anchor.x), float(bounds[1] - anchor.y))
@@ -398,8 +400,11 @@ func render_sprites(world: Node2D, canvas: CanvasItem) -> void:
                 var seed_y := float(anchor.y) + center.y
                 var texture: Texture2D = BUILDING_SPRITES[posmod(int(absf(seed_x * 17.0 + seed_y * 31.0)), BUILDING_SPRITES.size())]
                 var sprite_height: float = sprite_width * float(texture.get_height()) / float(texture.get_width())
-                canvas.draw_texture_rect(texture, Rect2(where.x - sprite_width * 0.5, where.y - sprite_height * 0.8, sprite_width, sprite_height), false,
-                    Color(1, 1, 1, 0.12) if world.fade_occluding_buildings else Color.WHITE)
+                decorations.append({
+                    "depth": where.y, "texture": texture,
+                    "rect": Rect2(where.x - sprite_width * 0.5, where.y - sprite_height * 0.86, sprite_width, sprite_height),
+                    "tint": Color(1, 1, 1, 0.12) if world.fade_occluding_buildings else Color.WHITE
+                })
                 drawn_buildings += 1
             elif kind == "forest" and feature.get("fill_ok", false) and drawn_trees < MAX_TREE_SPRITES:
                 # Trees stand on a fixed 8-cell lattice of the world grid, inside the real polygon.
@@ -415,7 +420,17 @@ func render_sprites(world: Node2D, canvas: CanvasItem) -> void:
                         if Geometry2D.is_point_in_polygon(local, feature["fill"]):
                             var tree_at: Vector2 = world.project_cell(Vector2i(gx, gy))
                             var tree_width: float = 28.0 * world.zoom_level
-                            canvas.draw_texture_rect(TREE_SPRITE, Rect2(tree_at.x - tree_width * 0.5, tree_at.y - tree_width, tree_width, tree_width), false)
+                            decorations.append({
+                                "depth": tree_at.y, "texture": TREE_SPRITE,
+                                "rect": Rect2(tree_at.x - tree_width * 0.5, tree_at.y - tree_width, tree_width, tree_width),
+                                "tint": Color.WHITE
+                            })
                             drawn_trees += 1
                         gy += 8
                     gx += 8
+    # Isometric painter order: northern objects first, southern objects in front.
+    # Only visible sourced objects are considered, with fixed per-frame caps.
+    decorations.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+        return float(a["depth"]) < float(b["depth"]))
+    for decoration in decorations:
+        canvas.draw_texture_rect(decoration["texture"], decoration["rect"], false, decoration["tint"])

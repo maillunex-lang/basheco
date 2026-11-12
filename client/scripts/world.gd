@@ -10,6 +10,7 @@ const CityChunks = preload("res://scripts/city_chunks.gd")
 const GeoBackground = preload("res://scripts/geo_background.gd")
 const WorldGrid = preload("res://scripts/world_grid.gd")
 const WorldOverlay = preload("res://scripts/world_overlay.gd")
+const IsoBuilding = preload("res://scripts/iso_building.gd")
 const GENERATED := "res://data/generated_locations.json"
 var generated_objects: Array[Dictionary] = []
 var geo_background = GeoBackground.new()
@@ -382,6 +383,24 @@ func draw_overlay(canvas: CanvasItem) -> void:
             var valid: bool = build_panel._selection_error().is_empty()
             var tint := Color("#62e0b6") if valid else Color("#ffb56b")
             canvas.draw_polyline(points, tint, 4.0, true)
+    # Server-confirmed built parcels get 2D isometric silhouettes. Empty
+    # plots stay empty: never turn a legal plot into an imaginary building.
+    if lod() == 0:
+        var buildings: Array[Dictionary] = []
+        for plot in plots:
+            if plot.get("building_id") == null or not CityChunks.plot_intersects_bounds(plot, view):
+                continue
+            var origin := Vector2i(int(plot["cell_x"]), int(plot["cell_y"]))
+            var width := int(plot["width_cells"])
+            var height := int(plot["height_cells"])
+            if width < 1 or height < 1:
+                continue
+            var bottom := project_cell(origin + Vector2i(width, height))
+            buildings.append({"depth": bottom.y, "plot": plot})
+        buildings.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+            return float(a["depth"]) < float(b["depth"]))
+        for item in buildings:
+            IsoBuilding.draw_building(canvas, self, item["plot"])
     # Playable parcels always render above the read-only geography.
     if lod() <= 2:
         for i in range(plots.size()):
