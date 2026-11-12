@@ -16,6 +16,8 @@ Status: GitHub-only foundation; **not deployed**. No changes to VPS.
 5. Build Godot touch-first preview, rotation, confirm/cancel, viewport streaming and revalidation on server.
 6. Test two sessions placing on the same cell concurrently, retries, disconnects, persistence, restoration, and 3–5 real Android devices. Publish an APK only after checks.
 
+> Update 2026-11-12: gate 2 (shared EPSG:32640 coordinates for server, importer and client, control points, no local origins) and the legacy plot mapping are implemented and tested in GitHub; migrations 014 and 015 were executed on a disposable database. See `docs/STAGE_01_UNIFIED_MAP.md`. Buildability masks and placement API (gates 3–6) are untouched.
+
 ## Existing risks
 - `world_plots` is still settlement-local, nonnegative and limited to 4096. The new global object grid does not yet change legacy plot coordinates. Do not combine these coordinates in placement API until a backfill/mapping exists.
 - `world_buildings.plot_id UNIQUE` still allows one legacy building per plot. New `world_objects` supports many; legacy buildings need occupancy backfill and conflict resolution.

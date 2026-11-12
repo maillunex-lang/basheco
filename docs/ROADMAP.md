@@ -8,6 +8,9 @@
 - [ ] Transactional DB ledger, idempotency, integration tests on PostgreSQL
 - [ ] Background jobs, recovery, observability and backup testing
 
+## Unified map checkpoint (2026-11-12)
+One world grid for every settlement (EPSG:32640, 6 m cells, 64×64 chunks), real OSM atlas, seamless Godot map and legacy plot mapping are implemented and tested in GitHub; not deployed. Details and limits: `docs/STAGE_01_UNIFIED_MAP.md`.
+
 ## Stage 2
 Godot 4 client, touch controls, Ufa test district, geodata import.
 

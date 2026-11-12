@@ -37,7 +37,12 @@ var zoom_level := DEFAULT_ZOOM
 var render_origin := Vector2i.ZERO
 var camera_offset := Vector2.ZERO
 var camera_initialized := false
-var world_visible := false
+var world_visible := false:
+    set(value):
+        world_visible = value
+        queue_redraw()
+        if overlay != null:
+            overlay.queue_redraw()
 var dragging := false
 var touches: Dictionary = {}
 var pinch_distance := 0.0
