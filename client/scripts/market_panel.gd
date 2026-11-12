@@ -5,7 +5,8 @@ var http: HTTPRequest
 var panel: PanelContainer
 var info: Label
 var listing_selector: OptionButton
-var company_field: LineEdit
+var company_field: OptionButton
+var company_ids: Array[String] = []
 var resource_field: LineEdit
 var quantity_field: SpinBox
 var price_field: SpinBox
@@ -28,8 +29,8 @@ func _ready() -> void:
     title.text = "Рынок BASHECO"
     title.add_theme_font_size_override("font_size", 20)
     layout.add_child(title)
-    company_field = LineEdit.new()
-    company_field.placeholder_text = "UUID вашей компании"
+    company_field = OptionButton.new()
+    company_field.add_item("Сначала создайте компанию")
     layout.add_child(company_field)
     resource_field = LineEdit.new()
     resource_field.placeholder_text = "Код ресурса (например, vegetables)"
@@ -70,7 +71,8 @@ func _ready() -> void:
     info.text = "Войдите в игру для торговли"
     layout.add_child(info)
     panel.visible = false
-    api.authenticated.connect(load_companies)
+    get_parent().get_node("Company").companies_updated.connect(_set_companies)
+    api.authenticated.connect(refresh_listings)
 
 func _caption(value: String) -> Label:
     var label := Label.new()
@@ -93,16 +95,41 @@ func _request(kind: String, path: String, method: int = HTTPClient.METHOD_GET, p
         busy = false
         info.text = "Нет соединения"
 
+func _set_companies(companies: Array) -> void:
+    var previous := _selected_company_id()
+    company_field.clear()
+    company_ids.clear()
+    var selected_index := 0
+    for entry in companies:
+        var id := str(entry["id"])
+        company_field.add_item(str(entry.get("name", "Компания")))
+        company_ids.append(id)
+        if id == previous:
+            selected_index = company_ids.size() - 1
+    if company_ids.is_empty():
+        company_field.add_item("Сначала создайте компанию")
+    else:
+        company_field.select(selected_index)
+
+func _selected_company_id() -> String:
+    if company_ids.is_empty() or company_field.selected < 0 or company_field.selected >= company_ids.size():
+        return ""
+    return company_ids[company_field.selected]
+
 func load_companies() -> void:
-    _request("companies", "/v1/companies")
+    get_parent().get_node("Company").load_companies()
+
 
 func refresh_listings() -> void:
     panel.visible = true
     _request("list", "/v1/market/listings")
 
 func _sell() -> void:
+    if _selected_company_id().is_empty():
+        info.text = "Сначала создайте компанию"
+        return
     var payload := JSON.stringify({
-        "company_id": company_field.text.strip_edges(),
+        "company_id": _selected_company_id(),
         "resource_code": resource_field.text.strip_edges(),
         "quantity": int(quantity_field.value),
         "unit_price_kopecks": int(price_field.value)
@@ -115,6 +142,9 @@ func _selected_id() -> String:
     return str(listing_selector.get_item_metadata(listing_selector.selected))
 
 func _buy() -> void:
+    if _selected_company_id().is_empty():
+        info.text = "Сначала создайте компанию"
+        return
     var listing_id := _selected_id()
     if listing_id.is_empty():
         return
@@ -136,13 +166,7 @@ func _on_response(_result: int, status: int, _headers_result: PackedStringArray,
     if status < 200 or status >= 300 or typeof(parsed) != TYPE_DICTIONARY:
         info.text = "Ошибка рынка: HTTP " + str(status)
         return
-    if pending == "companies":
-        var companies: Array = parsed.get("companies", [])
-        if companies.size() > 0:
-            company_field.text = str(companies[0]["id"])
-        info.text = "Компаний: " + str(companies.size())
-        refresh_listings()
-    elif pending == "list":
+    if pending == "list":
         listings = parsed.get("listings", [])
         listing_selector.clear()
         for listing in listings:
