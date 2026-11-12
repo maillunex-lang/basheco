@@ -27,15 +27,40 @@
     "wd_items.json": "1d91bf6848402ff65f1b40c6607e54dacac2f1697426e9fd5671af5f41a3dfe2",
     "wd_population.json": "e62e65050624c3cecbae2edd0609b4df6b64d96447c57180137c35773ad3e42d"
    },
-   "reflects": "данные Wikidata на момент запроса; коды ОКТМО и население внесены участниками со ссылками на Росстат"
+   "reflects": "данные Wikidata на момент запроса; используются только координаты и население по совпадению кода ОКТМО"
   },
   {
-   "id": "oktmo-rosstat",
-   "title": "ОКТМО, Росстат (официальный классификатор)",
-   "url": "https://rosstat.gov.ru/opendata/7708234640-oktmo",
+   "id": "oktmo",
+   "title": "ОКТМО ОК 033-2013 (ведёт Росстат), полный файл",
+   "url": "https://classifikators.ru/assets/downloads/oktmo/oktmo.csv",
+   "retrieved_utc": "2026-11-12T11:59:27Z",
+   "license": null,
+   "raw_sha256": {
+    "oktmo.csv": "c91a45c85d25c881b9a87cd9973a663e004b5d1b0e83d335778fcd4965ff558f"
+   },
+   "origin": "зеркало classifikators.ru; сайт Росстата недоступен из среды сборки",
+   "checks": "формат совпадает с открытыми данными Росстата; контрольные цифры всех 6368 строк региона верны; сельские населённые пункты совпали с ОКАТО: 4538 из 4538",
+   "not_checked": "побайтное совпадение с файлом Росстата",
+   "latest_change_in_region": "20220201"
+  },
+  {
+   "id": "okato",
+   "title": "ОКАТО ОК 019-95, полный файл (только для сверки)",
+   "url": "https://classifikators.ru/assets/downloads/okato/okato.csv",
+   "retrieved_utc": "2026-11-12T12:01:42Z",
+   "license": null,
+   "raw_sha256": {
+    "okato.csv": "27167cee213c9bdc3631d6c77130d1445e46d59ccfe13c5baf9458b9e3d235db"
+   },
+   "origin": "зеркало classifikators.ru"
+  },
+  {
+   "id": "registry-rb",
+   "title": "Реестр административно-территориальных единиц и населённых пунктов РБ (постановление Правительства РБ от 29.12.2006 № 391)",
+   "url": "https://base.garant.ru/17713113/",
    "retrieved_utc": null,
    "license": null,
-   "status": "НЕ ПОЛУЧЕН: сайт Росстата недоступен из среды сборки. Сверка с официальным файлом не выполнена"
+   "status": "НЕ ИСПОЛЬЗОВАН: постановление опубликовано без текста реестра, публичной версии нет"
   }
  ]
 }

@@ -8,8 +8,14 @@ Two steps:
   python -m basheco.geo_registry normalise RAW_DIR   # needs downloaded raw files
   python -m basheco.geo_registry build                # offline, deterministic
 
-`normalise` turns raw downloads (OSM API XML, Wikidata SPARQL JSON; never
-committed) into compact source snapshots under geodata/admin/sources/.
+`normalise` turns raw downloads (OKTMO and OKATO CSV, OSM API XML, Wikidata
+SPARQL JSON; never committed) into compact source snapshots under
+geodata/admin/sources/.
+
+Roles of the sources: OKTMO (OK 033-2013) defines WHICH settlements exist, their
+official names, types and municipality. OpenStreetMap gives boundaries.
+Wikidata only adds coordinates and population to an OKTMO code; it never adds
+or renames a settlement.
 `build` turns those snapshots into the registry under geodata/admin/. A rebuild
 from the same snapshots reproduces every file byte for byte and never changes
 an identifier that was issued before (id_registry.json).
@@ -20,6 +26,7 @@ mismatch is written to issues.json instead of being smoothed over.
 """
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import re
@@ -30,7 +37,7 @@ from pathlib import Path
 from basheco.world_grid import CELL_METRES, CRS, GRID_VERSION, metres_to_cell
 from basheco.world_projection import lonlat_to_metres
 
-DATASET_VERSION = "bashkortostan-admin/2026-01-01/r1"
+DATASET_VERSION = "bashkortostan-admin/2026-01-01/r2"
 REFERENCE_DATE = "2026-01-01"
 REGION_RELATION = "77677"
 REGION_OKTMO = "80000000"
@@ -47,6 +54,10 @@ SETTLEMENT_TYPES = (  # order = priority when a Wikidata item has several classe
     ("посёлок", ("посёлок",)),
 )
 ABOLISHED = ("бывший населённый пункт", "бывшая деревня", "исчезнувший населённый пункт")
+OKTMO_MIRROR = "https://classifikators.ru/assets/downloads/oktmo/oktmo.csv"
+OKATO_MIRROR = "https://classifikators.ru/assets/downloads/okato/okato.csv"
+OKTMO_TYPES = {"г": "город", "рп": "рабочий посёлок", "с": "село", "д": "деревня", "п": "посёлок",
+               "х": "хутор", "кордон": "кордон"}
 LEGACY_SLUGS = {  # pre-registry text ids used by world_sectors / geo_locations
     "ufa": {"name": "Уфа", "type": "город", "near": (55.972, 54.7386)},
     "mikhailovka": {"name": "Михайловка", "type": None, "near": (55.8925, 54.8055)},
@@ -104,9 +115,88 @@ def _relation(xml_file: Path, relation_id: str, ways: dict) -> dict:
                                 if m.get("type") == "relation" and m.get("role") == "subarea"), key=int)}
 
 
+def oktmo_control_digit(code: str) -> int:
+    """Control number of an OKTMO/OKATO code (PR 50.1.024-2005)."""
+    def remainder(weight: int) -> int:
+        total = 0
+        for char in code:
+            total += int(char) * weight
+            weight = weight + 1 if weight < 10 else 1
+        return total % 11
+    value = remainder(1)
+    if value == 10:
+        value = remainder(3)
+    return 0 if value == 10 else value
+
+
+def normalise_oktmo(raw_dir: Path, out_dir: Path) -> dict:
+    """Bashkortostan part of the full OKTMO file, cross-checked against OKATO."""
+    read = lambda name: list(csv.reader((raw_dir / name).open(encoding="utf-8-sig"), delimiter=";"))
+    oktmo, okato = read("oktmo.csv"), read("okato.csv")
+    # The region is found by its title, not by an assumed code.
+    territories = sorted({r[0] for r in oktmo if r[6] == "Муниципальные образования Республики Башкортостан"})
+    mentions = sorted({r[0] for r in oktmo if "Республики Башкортостан" in r[6]})
+    if len(territories) != 1 or mentions != territories:
+        raise ValueError("Bashkortostan is not exactly one OKTMO territory: %s / %s" % (territories, mentions))
+    territory = territories[0]
+    rows = [r for r in oktmo if r[0] == territory]
+    for r in rows:
+        code = r[0] + r[1] + r[2] + (r[3] if r[5] == "2" else "")
+        if str(oktmo_control_digit(code)) != r[4]:
+            raise ValueError("OKTMO control digit mismatch: " + code)
+    municipalities, units, settlements = [], [], []
+    for r in rows:
+        if r[5] == "1" and r[1] != "000" and r[2] == "000" and not r[6].endswith("/") \
+                and not r[6].endswith("Республики Башкортостан"):
+            municipalities.append({"oktmo": r[0] + r[1] + "000", "name": r[6], "centre": r[7]})
+        elif r[5] == "1" and r[2] != "000" and not r[6].endswith("/"):
+            units.append({"oktmo": r[0] + r[1] + r[2], "name": r[6], "centre": r[7],
+                          "kind": "городское поселение" if r[2][0] == "1" else "сельское поселение"})
+        elif r[5] == "2" and r[3] != "000":
+            abbreviation, name = r[6].split(" ", 1)
+            settlements.append({"oktmo": r[0] + r[1] + r[2] + r[3], "type_abbr": abbreviation, "name": name,
+                                "change_no": r[9], "introduced": r[12]})
+    # Independent official cross-check: rural settlements of OKATO, by district, type and name.
+    key = lambda text: text.replace("ё", "е").strip().lower()
+    a_rows = [r for r in okato if r[0] == territory]
+    a_names = {r[1]: r[5] for r in a_rows if r[2] == "000" and r[3] == "000" and not r[5].startswith("Сельские")}
+    cities = {"уфа": "г уфа", "кумертау": "г кумертау", "сибай": "г сибай", "нефтекамск": "г нефтекамск",
+              "бирск": "бирский район", "дюртюли": "дюртюлинский район"}
+    a_set: dict = {}
+    for r in a_rows:
+        if r[3] != "000":
+            k = (cities.get(key(a_names[r[1]]), key(a_names[r[1]])), key(r[5]))
+            a_set[k] = a_set.get(k, 0) + 1
+    m_names = {m["oktmo"][:5]: key(m["name"]).replace("муниципальный район", "район")
+               .replace("зато город ", "г ").replace("город ", "г ") for m in municipalities}
+    matched, unmatched = 0, []
+    remaining = dict(a_set)
+    for item in settlements:
+        k = (m_names[item["oktmo"][:5]], key(item["type_abbr"] + " " + item["name"]))
+        if remaining.get(k, 0) > 0:
+            remaining[k] -= 1
+            matched += 1
+        elif item["type_abbr"] not in ("г", "рп"):
+            unmatched.append(item["oktmo"])
+    dates = sorted({r[12][6:] + r[12][3:5] + r[12][:2] for r in rows if len(r[12]) == 10})
+    snapshot = {
+        "schema": "basheco.geo_source.oktmo/1", "classifier": "ОКТМО ОК 033-2013",
+        "territory_code": territory, "region": "Республика Башкортостан",
+        "rows_in_full_file": len(oktmo), "rows_of_region": len(rows),
+        "latest_change_in_region": dates[-1] if dates else None,
+        "control_digits_checked": len(rows),
+        "okato_cross_check": {"okato_rural_settlements": sum(a_set.values()), "matched_in_oktmo": matched,
+                              "oktmo_rural_not_in_okato": unmatched,
+                              "okato_not_in_oktmo": sum(v for v in remaining.values() if v > 0)},
+        "municipalities": municipalities, "units": units, "settlements": settlements}
+    _dump(out_dir / "sources" / "oktmo_bashkortostan.json", snapshot)
+    return snapshot
+
+
 def normalise(raw_dir: Path, out_dir: Path) -> dict:
     """Raw downloads -> geodata/admin/sources/*.json. Requires RAW_DIR/download_log.json."""
     log = _load(raw_dir / "download_log.json")
+    oktmo = normalise_oktmo(raw_dir, out_dir)
     ways: dict[str, list] = {}
     region = _relation(raw_dir / "rb_full.xml", REGION_RELATION, ways)
     municipalities = [_relation(raw_dir / "rel" / f"{rid}.xml", rid, ways) for rid in region["subareas"]]
@@ -184,10 +274,25 @@ def normalise(raw_dir: Path, out_dir: Path) -> dict:
         {"id": "wikidata-units", "title": "Wikidata: населённые пункты и муниципальные единицы с кодами ОКТМО",
          "url": SPARQL, "retrieved_utc": log.get("wd_items.json"), "license": "CC0 1.0",
          "raw_sha256": {"wd_items.json": _sha256(wd_item), "wd_population.json": _sha256(wd_pop)},
-         "reflects": "данные Wikidata на момент запроса; коды ОКТМО и население внесены участниками со ссылками на Росстат"},
-        {"id": "oktmo-rosstat", "title": "ОКТМО, Росстат (официальный классификатор)",
-         "url": "https://rosstat.gov.ru/opendata/7708234640-oktmo", "retrieved_utc": None, "license": None,
-         "status": "НЕ ПОЛУЧЕН: сайт Росстата недоступен из среды сборки. Сверка с официальным файлом не выполнена"},
+         "reflects": "данные Wikidata на момент запроса; используются только координаты и население по совпадению кода ОКТМО"},
+        {"id": "oktmo", "title": "ОКТМО ОК 033-2013 (ведёт Росстат), полный файл",
+         "url": OKTMO_MIRROR, "retrieved_utc": log.get("oktmo.csv"), "license": None,
+         "raw_sha256": {"oktmo.csv": _sha256(raw_dir / "oktmo.csv")},
+         "origin": "зеркало classifikators.ru; сайт Росстата недоступен из среды сборки",
+         "checks": "формат совпадает с открытыми данными Росстата; контрольные цифры всех %d строк региона верны; "
+                   "сельские населённые пункты совпали с ОКАТО: %d из %d" % (
+                       oktmo["control_digits_checked"], oktmo["okato_cross_check"]["matched_in_oktmo"],
+                       oktmo["okato_cross_check"]["okato_rural_settlements"]),
+         "not_checked": "побайтное совпадение с файлом Росстата",
+         "latest_change_in_region": oktmo["latest_change_in_region"]},
+        {"id": "okato", "title": "ОКАТО ОК 019-95, полный файл (только для сверки)",
+         "url": OKATO_MIRROR, "retrieved_utc": log.get("okato.csv"), "license": None,
+         "raw_sha256": {"okato.csv": _sha256(raw_dir / "okato.csv")},
+         "origin": "зеркало classifikators.ru"},
+        {"id": "registry-rb", "title": "Реестр административно-территориальных единиц и населённых пунктов РБ "
+                                       "(постановление Правительства РБ от 29.12.2006 № 391)",
+         "url": "https://base.garant.ru/17713113/", "retrieved_utc": None, "license": None,
+         "status": "НЕ ИСПОЛЬЗОВАН: постановление опубликовано без текста реестра, публичной версии нет"},
     ]}
     _dump(out_dir / "sources.json", sources, compact=False)
     return sources
@@ -293,6 +398,9 @@ def settlement_type(types: list[str]) -> str | None:
 def build(out_dir: Path) -> dict:
     osm = _load(out_dir / "sources" / "osm_admin.json")
     units = _load(out_dir / "sources" / "wikidata_units.json")["items"]
+    oktmo = _load(out_dir / "sources" / "oktmo_bashkortostan.json")
+    official_municipalities = {m["oktmo"]: m for m in oktmo["municipalities"]}
+    official_units = {u["oktmo"]: u for u in oktmo["units"]}
     ways_lonlat = osm["ways"]
     issues: list[dict] = []
 
@@ -315,112 +423,99 @@ def build(out_dir: Path) -> dict:
     ways_m = {key: [list(map(lambda v: round(v, 1), lonlat_to_metres(lon, lat))) for lon, lat in points]
               for key, points in ways_lonlat.items()}
     by_qid = {row["qid"]: row for row in units}
-    municipal_oktmo: dict[str, dict] = {}
     municipalities = []
     for source in osm["municipalities"]:
-        name = source["name"]
         if source["admin_level"] != "6" or source["boundary"] != "administrative":
-            raise ValueError("Unexpected municipal relation: " + str(name))
-        kind = "муниципальный район" if name.endswith("район") else "городской округ"
-        oktmo = None
+            raise ValueError("Unexpected municipal relation: " + str(source["name"]))
+        code = None
         unit = by_qid.get(source["wikidata"] or "")
         codes = [c for c in (unit["oktmo"] if unit else []) if len(c) == 8 and c.endswith("000")]
         if len(codes) == 1:
-            oktmo = codes[0]
+            code = codes[0]
         if source["oktmo_tag"]:
-            if oktmo and oktmo != source["oktmo_tag"]:
-                issue("oktmo_mismatch", name, "Код ОКТМО в OSM и Wikidata различается",
-                      osm=source["oktmo_tag"], wikidata=oktmo)
-            oktmo = oktmo or source["oktmo_tag"]
+            if code and code != source["oktmo_tag"]:
+                issue("oktmo_mismatch", source["name"], "Код ОКТМО в OSM и Wikidata различается",
+                      osm=source["oktmo_tag"], wikidata=code)
+            code = code or source["oktmo_tag"]
         rings = assemble_rings(source["members"], ways_lonlat)
-        municipalities.append({"source": source, "name": name, "type": kind, "oktmo": oktmo, "rings": rings,
+        municipalities.append({"source": source, "oktmo": code, "rings": rings,
                                "rings_lonlat": [ring_points(r, ways_lonlat) for r in rings]})
-    # A municipality whose code is unknown gets it from its own settlements below.
     region_rings = assemble_rings(osm["region"]["members"], ways_lonlat)
 
-    settlements_raw = []
-    unit_names: dict[str, str] = {}
-    for row in units:
+    # Wikidata is only a lookup by OKTMO code (coordinates, population).
+    wikidata: dict[str, dict] = {}
+    for row in sorted(units, key=lambda r: r["qid"]):
         long_codes = [c for c in row["oktmo"] if len(c) == 11]
-        for code in row["oktmo"]:
-            if len(code) == 8 and not code.endswith("000"):
-                unit_names.setdefault(code, row["label"])
-        if len(long_codes) == 1 and long_codes[0].startswith("80"):
-            settlements_raw.append((long_codes[0], row))
-        elif long_codes:
-            issue("oktmo_ambiguous", row["qid"], "У объекта несколько кодов ОКТМО или код другого региона",
-                  codes=row["oktmo"])
-    seen_codes: dict[str, str] = {}
-    located: dict[str, list] = {}
-    for code, row in sorted(settlements_raw, key=lambda item: (item[0], item[1]["qid"])):
-        if code in seen_codes:
-            issue("oktmo_duplicate", row["qid"], "Код ОКТМО уже занят другим объектом Wikidata",
-                  oktmo=code, other=seen_codes[code])
+        if len(long_codes) != 1:
+            if long_codes:
+                issue("wikidata_code_ambiguous", row["qid"], "У объекта Wikidata несколько кодов ОКТМО; не использован",
+                      codes=row["oktmo"])
             continue
-        seen_codes[code] = row["qid"]
-        located.setdefault(code[:5] + "000", []).append((code, row))
+        if long_codes[0] in wikidata:
+            issue("wikidata_code_duplicate", row["qid"], "Код ОКТМО уже занят другим объектом Wikidata; не использован",
+                  oktmo=long_codes[0], other=wikidata[long_codes[0]]["qid"])
+            continue
+        wikidata[long_codes[0]] = row
 
-    # Municipal code by spatial vote when Wikidata did not give it.
+    official: dict[str, list] = {}
+    for item in oktmo["settlements"]:
+        official.setdefault(item["oktmo"][:5] + "000", []).append(item)
+    # A boundary whose code is unknown gets it from the settlements that lie inside it.
     for item in municipalities:
         if item["oktmo"]:
             continue
         votes: dict[str, int] = {}
-        for code, rows in located.items():
-            for _, row in rows[:40]:
-                if row["coords"] and point_in_rings(row["coords"][0], item["rings_lonlat"]):
+        for code, rows in official.items():
+            for row in rows[:40]:
+                found = wikidata.get(row["oktmo"])
+                if found and found["coords"] and point_in_rings(found["coords"][0], item["rings_lonlat"]):
                     votes[code] = votes.get(code, 0) + 1
         if votes:
             item["oktmo"] = max(sorted(votes), key=lambda c: votes[c])
-            issue("municipality_code_inferred", item["name"],
-                  "Код ОКТМО муниципалитета определён по кодам его населённых пунктов", oktmo=item["oktmo"])
-    for item in municipalities:
-        if not item["oktmo"] or item["oktmo"] in municipal_oktmo:
-            raise ValueError("Municipality without a unique OKTMO code: " + item["name"])
-        municipal_oktmo[item["oktmo"]] = item
+            issue("municipality_code_inferred", item["source"]["name"],
+                  "Код ОКТМО границы из OSM определён по населённым пунктам внутри неё", oktmo=item["oktmo"])
+    matched_codes = [m["oktmo"] for m in municipalities]
+    if sorted(matched_codes) != sorted(official_municipalities):
+        raise ValueError("OSM boundaries and OKTMO municipalities do not match one to one")
 
     municipalities.sort(key=lambda m: m["oktmo"])
     municipal_out = []
     settlement_files: dict[str, list] = {}
     counts = {"settlements": 0, "with_coordinates": 0, "coordinates_confirmed": 0, "with_population": 0,
               "by_type": {}}
+    comparison = {"wikidata_items_matched_by_code": 0, "type_differs_from_wikidata": 0,
+                  "name_differs_from_wikidata": 0}
     all_settlements = []
+    plain = lambda text: re.sub(r"[^a-zа-я0-9]", "", text.lower().replace("ё", "е"))
     for item in municipalities:
+        record = official_municipalities[item["oktmo"]]
+        item["name"] = record["name"]
+        item["type"] = "городской округ" if item["oktmo"][2] == "7" else "муниципальный район"
         municipality_id = stable_id("M", item["oktmo"])
         rows_out = []
-        names: dict[str, int] = {}
-        for code, row in located.pop(item["oktmo"], []):
-            name = row["label"]
-            if re.fullmatch(r"Q\d+", name):
-                issue("no_russian_name", row["qid"], "У объекта Wikidata нет русского названия; запись не включена",
-                      oktmo=code)
-                continue
-            if "(" in name:
-                clean = re.sub(r"\s*\(.*\)\s*$", "", name)
-                issue("name_normalised", code, "Из названия убрано уточнение в скобках", original=name, used=clean)
-                name = clean
-            kind = settlement_type(row["types"])
-            unit_prefix = re.match(r"(городское|сельское) поселение (.+)$", name)
-            if unit_prefix:
-                # The code belongs to a settlement, but the source item describes its municipal unit.
-                issue("name_from_municipal_unit", code,
-                      "Код населённого пункта в источнике привязан к записи о поселении; название взято из неё",
-                      original=name, used=unit_prefix.group(2))
-                name = unit_prefix.group(2)
-                kind = kind or ("город" if unit_prefix.group(1) == "городское" else None)
+        names: dict[tuple, int] = {}
+        for row in official.get(item["oktmo"], []):
+            code, name = row["oktmo"], row["name"]
+            kind = OKTMO_TYPES.get(row["type_abbr"])
             if kind is None:
-                kind = "населённый пункт"
-                issue("type_unclear", code, "Тип населённого пункта не определён по источнику", types=row["types"])
-            if any(t.lower() in ABOLISHED for t in row["types"]):
-                issue("possibly_abolished", code, "В источнике пункт помечен как бывший; требуется сверка с ОКТМО",
-                      name=name)
-            entry = {"id": stable_id("S", code), "name": name, "type": kind,
+                raise ValueError("Unknown OKTMO settlement type: " + row["type_abbr"])
+            unit = official_units.get(code[:8])
+            found = wikidata.get(code)
+            entry = {"id": stable_id("S", code), "name": name, "type": kind, "type_abbr": row["type_abbr"],
                      "municipality_id": municipality_id, "oktmo": code,
-                     "unit_oktmo": code[:8], "unit_name": unit_names.get(code[:8]),
-                     "wikidata": row["qid"], "lon": None, "lat": None, "easting": None, "northing": None,
+                     "unit_oktmo": code[:8] if unit else None, "unit_name": unit["name"] if unit else None,
+                     "oktmo_change_no": row["change_no"], "oktmo_introduced": row["introduced"],
+                     "wikidata": found["qid"] if found else None,
+                     "lon": None, "lat": None, "easting": None, "northing": None,
                      "world_cell": None, "coordinate_source": None, "coordinate_status": "missing",
                      "population": None}
+            if found:
+                comparison["wikidata_items_matched_by_code"] += 1
+                other_type = settlement_type(found["types"])
+                comparison["type_differs_from_wikidata"] += other_type != kind
+                comparison["name_differs_from_wikidata"] += plain(found["label"]) != plain(name)
             # Prefer a coordinate that agrees with the settlement's own municipality.
-            candidates = row["coords"]
+            candidates = found["coords"] if found else []
             agreeing = [c for c in candidates if point_in_rings(c, item["rings_lonlat"])]
             if len(candidates) > 1:
                 issue("several_coordinates", code,
@@ -428,7 +523,8 @@ def build(out_dir: Path) -> dict:
                       name=name, coords=candidates)
             chosen = (agreeing or candidates or [None])[0]
             if chosen is not None and not agreeing:
-                actual = next((m["name"] for m in municipalities if point_in_rings(chosen, m["rings_lonlat"])), None)
+                actual = next((m["source"]["name"] for m in municipalities
+                               if point_in_rings(chosen, m["rings_lonlat"])), None)
                 if actual is None:
                     # Outside the republic altogether: not a usable coordinate.
                     issue("coordinates_rejected", code, "Координаты из источника лежат вне республики и не использованы",
@@ -436,7 +532,7 @@ def build(out_dir: Path) -> dict:
                     chosen = None
                 else:
                     issue("outside_boundary", code,
-                          "Точка лежит вне границы муниципалитета, к которому пункт отнесён по коду ОКТМО",
+                          "Точка лежит вне границы муниципалитета, к которому пункт отнесён в ОКТМО",
                           name=name, expected=item["name"], found_in=actual)
             if chosen is not None:
                 lon, lat = chosen
@@ -448,14 +544,15 @@ def build(out_dir: Path) -> dict:
                 counts["with_coordinates"] += 1
                 counts["coordinates_confirmed"] += bool(agreeing)
             elif not candidates:
-                issue("no_coordinates", code, "Нет координат в источнике", name=name)
-            if row["population"]:
-                entry["population"] = {**row["population"], "via": "wikidata:P1082"}
+                issue("no_coordinates", code, "Нет координат: в Wikidata нет объекта с этим кодом ОКТМО или у него нет координат",
+                      name=row["type_abbr"] + " " + name, municipality=item["name"])
+            if found and found["population"]:
+                entry["population"] = {**found["population"], "via": "wikidata:P1082"}
                 counts["with_population"] += 1
-            names[name] = names.get(name, 0) + 1
+            names[(kind, name)] = names.get((kind, name), 0) + 1
             rows_out.append(entry)
         for entry in rows_out:
-            entry["same_name_in_municipality"] = names[entry["name"]] > 1
+            entry["same_name_in_municipality"] = names[(entry["type"], entry["name"])] > 1
         rows_out.sort(key=lambda e: e["oktmo"])
         for entry in rows_out:
             counts["by_type"][entry["type"]] = counts["by_type"].get(entry["type"], 0) + 1
@@ -467,16 +564,21 @@ def build(out_dir: Path) -> dict:
         centre = item["source"]["admin_centre"] or {}
         municipal_out.append({
             "id": municipality_id, "name": item["name"], "type": item["type"], "oktmo": item["oktmo"],
+            "admin_centre": record["centre"], "osm_name": item["source"]["name"],
             "osm_relation": item["source"]["osm_relation"], "wikidata": item["source"]["wikidata"],
-            "admin_centre": centre.get("name"),
             "admin_centre_lonlat": [centre["lon"], centre["lat"]] if centre else None,
             "bbox_m": [min(xs), min(ys), max(xs), max(ys)],
             "area_km2": round(polygon_area(item["rings"], ways_m) / 1e6, 1),
             "settlement_count": len(rows_out), "rings": item["rings"]})
-    for code, rows in sorted(located.items()):
-        for settlement_code, row in rows:
-            issue("unknown_municipality", settlement_code,
-                  "Код ОКТМО не относится ни к одному из 63 муниципалитетов", name=row["label"])
+    official_codes = {row["oktmo"] for row in oktmo["settlements"]}
+    for code in sorted(set(wikidata) - official_codes):
+        issue("wikidata_code_not_in_oktmo", code,
+              "Объект Wikidata с кодом, которого нет в ОКТМО; в справочник не включён",
+              name=wikidata[code]["label"], wikidata=wikidata[code]["qid"])
+    current_ids = {e["id"] for e in all_settlements} | {m["id"] for m in municipal_out}
+    for key in sorted(registry):
+        if key[0] in "SM" and key not in current_ids:
+            registry[key]["retired"] = True  # an issued id is never reused or deleted
 
     # Legacy text ids -> registry ids (explicit, checked by position).
     legacy = {}
@@ -551,12 +653,16 @@ def build(out_dir: Path) -> dict:
     version = {
         "schema": "basheco.geo_dataset_version/1", "dataset_version": DATASET_VERSION,
         "target_reference_date": REFERENCE_DATE,
-        "actual_state": "границы и перечень отражают OSM и Wikidata на дату загрузки (см. sources.json), а не официальный срез на 1 января 2026 года",
+        "actual_state": "перечень, названия, типы и принадлежность: ОКТМО с изменениями, действующими по региону на дату файла; границы: OSM на дату загрузки (см. sources.json)",
         "verification": {
-            "official_oktmo_file_compared": False,
-            "municipality_count_confirmed_by_primary_legal_source": False,
-            "note": "Сайт Росстата недоступен из среды сборки. До сверки с официальным файлом ОКТМО полнота перечня и официальность названий не подтверждены",
+            "settlement_list_source": "ОКТМО ОК 033-2013",
+            "oktmo_file_is_rosstat_original": False,
+            "oktmo_latest_change_in_region": oktmo["latest_change_in_region"],
+            "okato_cross_check": oktmo["okato_cross_check"],
+            "registry_of_republic_compared": False,
+            "note": "Файл ОКТМО получен с зеркала и побайтно с файлом Росстата не сверен. Реестр РБ (постановление № 391) публично не опубликован и не использовался",
         },
+        "comparison_with_wikidata": comparison,
         "counts": {"municipalities": len(municipal_out), "municipalities_by_type": dict(sorted(types.items())),
                    **{k: v for k, v in counts.items() if k != "by_type"},
                    "settlements_by_type": dict(sorted(counts["by_type"].items())),

@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 
 from basheco.geo_registry import (
-    DATASET_VERSION, SIMPLIFY_METRES, assemble_rings, build, point_in_rings, polygon_area,
-    ring_points, settlement_type, shoelace, simplify,
+    DATASET_VERSION, SIMPLIFY_METRES, assemble_rings, build, oktmo_control_digit, point_in_rings,
+    polygon_area, ring_points, settlement_type, shoelace, simplify,
 )
 from basheco.world_projection import lonlat_to_metres
 
@@ -41,6 +41,13 @@ class PureGeometryTests(unittest.TestCase):
         self.assertEqual(simplify(line, 0), line)
         self.assertEqual(simplify(line, 1000), [[0, 0], [40, 0]])
 
+    def test_oktmo_control_digit(self):
+        # Control numbers exactly as they stand in the classifier file.
+        self.assertEqual(oktmo_control_digit("80000000"), 8)
+        self.assertEqual(oktmo_control_digit("80601000"), 9)
+        self.assertEqual(oktmo_control_digit("80601404"), 1)
+        self.assertEqual(oktmo_control_digit("01512000"), 9)
+
     def test_settlement_types(self):
         self.assertEqual(settlement_type(["деревня", "административно-территориальная единица России"]), "деревня")
         self.assertEqual(settlement_type(["город России", "посёлок городского типа"]), "город")
@@ -63,6 +70,7 @@ class CommittedRegistryTests(unittest.TestCase):
         cls.legacy = load("legacy_ids.json")["ids"]
         cls.ways = {lod: load(f"boundaries/ways_{lod}.json") for lod in SIMPLIFY_METRES}
         cls.source_ways = load("sources/osm_admin.json")["ways"]
+        cls.oktmo = load("sources/oktmo_bashkortostan.json")
         cls.settlements = []
         for item in cls.municipalities:
             data = load(f"settlements/{item['id']}.json")
@@ -78,13 +86,15 @@ class CommittedRegistryTests(unittest.TestCase):
                          {"городской округ": 9, "муниципальный район": 54})
         for item in self.municipalities:
             self.assertRegex(item["oktmo"], r"^80[67]\d{2}000$")
-            self.assertTrue(item["name"] and item["admin_centre"] and item["osm_relation"])
+            self.assertTrue(item["name"] and item["admin_centre"] and item["osm_relation"] and item["osm_name"])
             self.assertEqual(item["oktmo"][2] == "7", item["type"] == "городской округ")
 
     def test_identifiers_are_unique_and_registered(self):
         ids = [m["id"] for m in self.municipalities] + [s["id"] for s in self.settlements] + [self.region["id"]]
         self.assertEqual(len(ids), len(set(ids)))
-        self.assertEqual(set(ids), set(self.registry))
+        self.assertLessEqual(set(ids), set(self.registry))
+        retired = {key for key, entry in self.registry.items() if entry.get("retired")}
+        self.assertEqual(set(self.registry) - set(ids), retired)  # issued ids are never deleted
         codes = [s["oktmo"] for s in self.settlements]
         self.assertEqual(len(codes), len(set(codes)))
         for entry in self.settlements:
@@ -98,15 +108,52 @@ class CommittedRegistryTests(unittest.TestCase):
             owner = by_id[entry["municipality_id"]]
             self.assertEqual(entry["oktmo"][:5], owner["oktmo"][:5])
             self.assertTrue(entry["name"])
-            self.assertNotRegex(entry["name"], r"^Q\d+$|\(|поселение")
             self.assertIn(entry["type"], {"город", "рабочий посёлок", "село", "деревня", "посёлок", "хутор",
-                                          "населённый пункт"})
+                                          "кордон"})
             counted[owner["id"]] = counted.get(owner["id"], 0) + 1
         for item in self.municipalities:
             self.assertEqual(counted.get(item["id"], 0), item["settlement_count"])
             self.assertGreaterEqual(item["settlement_count"], 1)
         self.assertEqual(len(self.settlements), self.version["counts"]["settlements"])
         self.assertEqual(sum(s["type"] == "город" for s in self.settlements), 21)
+
+    def test_list_names_types_and_membership_come_from_oktmo(self):
+        snapshot = self.oktmo
+        self.assertEqual((snapshot["classifier"], snapshot["territory_code"]), ("ОКТМО ОК 033-2013", "80"))
+        self.assertEqual(snapshot["control_digits_checked"], snapshot["rows_of_region"])
+        official = {s["oktmo"]: s for s in snapshot["settlements"]}
+        ours = {s["oktmo"]: s for s in self.settlements}
+        self.assertEqual(set(ours), set(official))
+        self.assertEqual(len(ours), 4561)
+        for code, entry in ours.items():
+            self.assertEqual((entry["name"], entry["type_abbr"]), (official[code]["name"], official[code]["type_abbr"]))
+        self.assertEqual({m["oktmo"]: m["name"] for m in self.municipalities},
+                         {m["oktmo"]: m["name"] for m in snapshot["municipalities"]})
+        units = {u["oktmo"]: u["name"] for u in snapshot["units"]}
+        self.assertEqual(sum(u["kind"] == "сельское поселение" for u in snapshot["units"]), 818)
+        self.assertEqual(sum(u["kind"] == "городское поселение" for u in snapshot["units"]), 14)
+        for entry in self.settlements:
+            if entry["oktmo"][2] == "6":  # inside a municipal district every settlement has a unit
+                self.assertEqual(entry["unit_name"], units[entry["unit_oktmo"]])
+        types = self.version["counts"]["settlements_by_type"]
+        self.assertEqual(types, {"город": 21, "деревня": 3131, "кордон": 1, "посёлок": 8,
+                                 "рабочий посёлок": 2, "село": 1320, "хутор": 78})
+
+    def test_oktmo_agrees_with_okato_on_every_rural_settlement(self):
+        check = self.oktmo["okato_cross_check"]
+        self.assertEqual(check["okato_rural_settlements"], 4538)
+        self.assertEqual(check["matched_in_oktmo"], 4538)
+        self.assertEqual(check["oktmo_rural_not_in_okato"], [])
+        self.assertEqual(check["okato_not_in_oktmo"], 0)
+
+    def test_no_duplicates_inside_one_unit(self):
+        seen = set()
+        for entry in self.settlements:
+            key = (entry["oktmo"][:8], entry["type"], entry["name"])
+            self.assertNotIn(key, seen)
+            seen.add(key)
+        flagged = [e for e in self.settlements if e["same_name_in_municipality"]]
+        self.assertEqual(len(flagged), 54)
 
     def test_coordinates_agree_with_boundaries_and_world_grid(self):
         rings_by_id = {}
@@ -173,8 +220,11 @@ class CommittedRegistryTests(unittest.TestCase):
         by_id = {s["id"]: s for s in self.sources}
         self.assertEqual(by_id["osm-admin-boundaries"]["license"], "ODbL 1.0")
         self.assertEqual(by_id["wikidata-units"]["license"], "CC0 1.0")
-        self.assertIsNone(by_id["oktmo-rosstat"]["retrieved_utc"])
-        self.assertFalse(self.version["verification"]["official_oktmo_file_compared"])
+        self.assertRegex(by_id["oktmo"]["raw_sha256"]["oktmo.csv"], r"^[0-9a-f]{64}$")
+        self.assertIn("зеркало", by_id["oktmo"]["origin"])
+        self.assertIsNone(by_id["registry-rb"]["retrieved_utc"])
+        self.assertFalse(self.version["verification"]["oktmo_file_is_rosstat_original"])
+        self.assertFalse(self.version["verification"]["registry_of_republic_compared"])
         self.assertEqual(self.version["target_reference_date"], "2026-01-01")
 
     def test_legacy_text_ids_are_mapped(self):

@@ -1,12 +1,25 @@
 {
  "schema": "basheco.geo_dataset_version/1",
- "dataset_version": "bashkortostan-admin/2026-01-01/r1",
+ "dataset_version": "bashkortostan-admin/2026-01-01/r2",
  "target_reference_date": "2026-01-01",
- "actual_state": "границы и перечень отражают OSM и Wikidata на дату загрузки (см. sources.json), а не официальный срез на 1 января 2026 года",
+ "actual_state": "перечень, названия, типы и принадлежность: ОКТМО с изменениями, действующими по региону на дату файла; границы: OSM на дату загрузки (см. sources.json)",
  "verification": {
-  "official_oktmo_file_compared": false,
-  "municipality_count_confirmed_by_primary_legal_source": false,
-  "note": "Сайт Росстата недоступен из среды сборки. До сверки с официальным файлом ОКТМО полнота перечня и официальность названий не подтверждены"
+  "settlement_list_source": "ОКТМО ОК 033-2013",
+  "oktmo_file_is_rosstat_original": false,
+  "oktmo_latest_change_in_region": "20220201",
+  "okato_cross_check": {
+   "okato_rural_settlements": 4538,
+   "matched_in_oktmo": 4538,
+   "oktmo_rural_not_in_okato": [],
+   "okato_not_in_oktmo": 0
+  },
+  "registry_of_republic_compared": false,
+  "note": "Файл ОКТМО получен с зеркала и побайтно с файлом Росстата не сверен. Реестр РБ (постановление № 391) публично не опубликован и не использовался"
+ },
+ "comparison_with_wikidata": {
+  "wikidata_items_matched_by_code": 4556,
+  "type_differs_from_wikidata": 255,
+  "name_differs_from_wikidata": 40
  },
  "counts": {
   "municipalities": 63,
@@ -14,28 +27,26 @@
    "городской округ": 9,
    "муниципальный район": 54
   },
-  "settlements": 4557,
-  "with_coordinates": 4555,
-  "coordinates_confirmed": 4539,
-  "with_population": 4550,
+  "settlements": 4561,
+  "with_coordinates": 4554,
+  "coordinates_confirmed": 4538,
+  "with_population": 4549,
   "settlements_by_type": {
    "город": 21,
-   "деревня": 2879,
-   "населённый пункт": 3,
+   "деревня": 3131,
+   "кордон": 1,
    "посёлок": 8,
    "рабочий посёлок": 2,
-   "село": 1566,
+   "село": 1320,
    "хутор": 78
   },
   "issues": {
    "coordinates_rejected": 2,
    "municipality_code_inferred": 1,
-   "name_from_municipal_unit": 1,
-   "name_normalised": 1,
+   "no_coordinates": 5,
    "outside_boundary": 16,
-   "possibly_abolished": 1,
    "several_coordinates": 62,
-   "type_unclear": 3
+   "wikidata_code_not_in_oktmo": 1
   }
  },
  "boundaries": {
