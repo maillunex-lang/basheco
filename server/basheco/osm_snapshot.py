@@ -9,7 +9,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from xml.etree import ElementTree
-from basheco.geodata import LocalProjection, clipped_linestring
+from basheco.geodata import LocalProjection, clipped_linestring, clip_polygon
 
 def classify(tags: dict[str, str]) -> str | None:
     if 'waterway' in tags or tags.get('natural') == 'water' or 'water' in tags:
@@ -54,11 +54,8 @@ def build_atlas(xml_file: Path, location_id: str, output_file: Path) -> dict:
         if kind in ('road', 'water') and (kind == 'road' or 'waterway' in tags):
             geometry = [[list(a), list(b)] for a, b in clipped_linestring(points, clip)]
         else:
-            # Polygons touching the extract edge need proper polygon clipping.
-            # Until available, exclude instead of rendering oversized artifacts.
-            geometry = [list(map(list, points))] if all(
-                clip[0] <= x <= clip[2] and clip[1] <= y <= clip[3] for x,y in points
-            ) else []
+            clipped = clip_polygon(points, clip) if len(points) >= 3 else []
+            geometry = [list(map(list, clipped))] if clipped else []
         for geom in geometry:
             if len(geom) < 2:
                 continue
