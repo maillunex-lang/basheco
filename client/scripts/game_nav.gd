@@ -45,7 +45,7 @@ func _layout() -> void:
             node.panel.custom_minimum_size.x = minf(360.0, size.x - 24.0)
 
 func _show_section(section: String) -> void:
-    for name in ["Company", "Economy", "Market"]:
+    for name in ["Company", "Economy", "Market", "Build"]:
         var node: Node = get_parent().get_node(name)
         if node.panel != null:
             node.panel.visible = name == section
