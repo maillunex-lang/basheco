@@ -276,6 +276,20 @@ func open_location(location_id: String) -> bool:
     _update_hud()
     return true
 
+## Administrative catalog navigation: the registry provides a global cell, not an atlas-local id.
+## A valid settlement without imported OSM detail is still a navigable map location.
+func open_world_cell(cell: Vector2i, _settlement_name: String = "") -> bool:
+    if not geo_background.ready:
+        return false
+    selected_plot = -1
+    world_visible = true
+    occlusion_button.visible = true
+    zoom_level = DEFAULT_ZOOM
+    center_on_cell(cell)
+    refresh_parcels()
+    _update_hud()
+    return true
+
 func _request_camera_parcels() -> void:
     if $API.access_token.is_empty() or lod() > 1:
         return
