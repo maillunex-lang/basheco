@@ -21,7 +21,7 @@ func _ready() -> void:
         push_warning("OSM snapshot unavailable")
         return
     var data: Variant = JSON.parse_string(file.get_as_text())
-    if typeof(data) != TYPE_DICTIONARY or not data.has("features"):
+    if typeof(data) != TYPE_DICTIONARY or not data.has("chunks"):
         return
     bounds = data.get("bbox", bounds)
     for chunk in data.get("chunks", []):
