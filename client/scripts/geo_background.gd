@@ -218,11 +218,11 @@ func render(world: Node2D, visible_bounds: Array[int]) -> void:
                     drawn_buildings += 1
             "water":
                 if points.size() >= 3 and points[0].distance_to(points[points.size() - 1]) < 1.0:
-                    world.draw_colored_polygon(points, Color("#327fa8", 0.65))
+                    _draw_safe_polygon(world, points, Color("#327fa8", 0.65))
                 world.draw_polyline(points, Color("#4a9cc7", 0.9), 2.0, true)
             "forest":
                 if points.size() >= 3 and points[0].distance_to(points[points.size() - 1]) < 1.0:
-                    world.draw_colored_polygon(points, Color("#36734c", 0.3))
+                    _draw_safe_polygon(world, points, Color("#36734c", 0.3))
                 world.draw_polyline(points, Color("#4b9164", 0.8), 2.0, true)
                 if world.zoom_level >= 0.85 and drawn_trees < 60:
                     var forest_tiles: PackedVector2Array = item["tiles"]
@@ -239,5 +239,15 @@ func render(world: Node2D, visible_bounds: Array[int]) -> void:
                             drawn_trees += 1
             "farmland":
                 if points.size() >= 3 and points[0].distance_to(points[points.size() - 1]) < 1.0:
-                    world.draw_colored_polygon(points, Color("#a3ad63", 0.24))
+                    _draw_safe_polygon(world, points, Color("#a3ad63", 0.24))
                 world.draw_polyline(points, Color("#a3ad63", 0.8), 2.0, true)
+
+func _draw_safe_polygon(world: Node2D, points: PackedVector2Array, color: Color) -> void:
+    # OSM boundaries can self-intersect or repeat vertices. Never send invalid
+    # polygons to the canvas renderer (which logs triangulation errors).
+    var ring := points.duplicate()
+    if ring.size() > 2 and ring[0].distance_to(ring[ring.size() - 1]) < 1.0:
+        ring.resize(ring.size() - 1)
+    if ring.size() < 3 or Geometry2D.triangulate_polygon(ring).is_empty():
+        return
+    world.draw_colored_polygon(ring, color)
