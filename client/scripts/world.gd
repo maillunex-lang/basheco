@@ -42,6 +42,7 @@ func _ready() -> void:
     hud.add_theme_color_override("font_color", Color.WHITE)
     hud.add_theme_font_size_override("font_size", 19)
     add_child(hud)
+    hud.visible = false
     _update_hud()
     $API.sector_loaded.connect(_on_sector_loaded)
     $API.request_failed.connect(_on_api_error)
@@ -112,6 +113,8 @@ func _on_sector_loaded(data: Dictionary) -> void:
 
 func _on_api_error(_status: int, message: String) -> void:
     hud.text = "BASHECO | " + message
+    if has_node("HUD"):
+        $HUD.district_label.text = "Ошибка карты: " + message
 
 func iso(x: float, y: float) -> Vector2:
     return Vector2((x - y) * TILE_W * 0.5, (x + y) * TILE_H * 0.5)
@@ -246,3 +249,5 @@ func _update_hud() -> void:
         var p: Dictionary = plots[selected_plot]
         suffix = "Участок %d · %s" % [selected_plot + 1, str(p["zone"])]
     hud.text = "УФА  /  %s" % suffix
+    if has_node("HUD"):
+        $HUD.district_label.text = "УФА  /  " + suffix
