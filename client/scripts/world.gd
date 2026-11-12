@@ -133,6 +133,8 @@ func open_location(location_id: String) -> bool:
     world_visible = true
     _focus_on_district()
     _update_hud()
+    if has_node("HUD"):
+        $HUD.update_geography_credit(location_id)
     queue_redraw()
     return true
 
