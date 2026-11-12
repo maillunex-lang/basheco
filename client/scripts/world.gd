@@ -9,7 +9,10 @@ var ufa_saved_size := Vector2i(INITIAL_GRID_SIZE, INITIAL_GRID_SIZE)
 const INITIAL_GRID_SIZE := 200
 var world_width := INITIAL_GRID_SIZE
 var world_height := INITIAL_GRID_SIZE
-const MIN_ZOOM := 0.65
+var world_min_x := 0
+var world_min_y := 0
+const MAX_VISIBLE_TILES := 18000
+const MIN_ZOOM := 0.85
 const MAX_ZOOM := 2.4
 const TILE_W := 64.0
 const TILE_H := 32.0
@@ -74,9 +77,9 @@ func _clamp_camera() -> void:
     var center := size * 0.5
     var margin := size * 0.8
     var corners := [
-        iso(0.0, 0.0) * zoom_level,
-        iso(float(world_width), 0.0) * zoom_level,
-        iso(0.0, float(world_height)) * zoom_level,
+        iso(float(world_min_x), float(world_min_y)) * zoom_level,
+        iso(float(world_width), float(world_min_y)) * zoom_level,
+        iso(float(world_min_x), float(world_height)) * zoom_level,
         iso(float(world_width), float(world_height)) * zoom_level
     ]
     var minimum: Vector2 = corners[0]
@@ -121,8 +124,7 @@ func _on_sector_loaded(data: Dictionary) -> void:
         maxi(INITIAL_GRID_SIZE, int(sector.get("height_tiles", INITIAL_GRID_SIZE)))
     )
     if current_location_id == "ufa":
-        world_width = ufa_saved_size.x
-        world_height = ufa_saved_size.y
+        _apply_geography_extent()
     selected_plot = -1
     _update_hud()
     _camera_changed()
@@ -136,12 +138,9 @@ func open_location(location_id: String) -> bool:
     current_location_id = location_id
     if location_id == "ufa":
         plots = ufa_saved_plots.duplicate(true)
-        world_width = ufa_saved_size.x
-        world_height = ufa_saved_size.y
     else:
         plots.clear()
-        world_width = 320
-        world_height = 370
+    _apply_geography_extent()
     selected_plot = -1
     world_visible = true
     _focus_on_district()
@@ -150,6 +149,20 @@ func open_location(location_id: String) -> bool:
         $HUD.update_geography_credit(location_id)
     queue_redraw()
     return true
+
+func _apply_geography_extent() -> void:
+    # Extent is measured from sourced geographic coverage; player plots can expand it.
+    # The geographic extract is not a claim about the official settlement boundary.
+    var extent: Rect2 = geo_background.tile_extent()
+    world_min_x = mini(0, int(floor(extent.position.x)) - 12)
+    world_min_y = mini(0, int(floor(extent.position.y)) - 12)
+    world_width = maxi(ufa_saved_size.x if current_location_id == "ufa" else 0, int(ceil(extent.end.x)) + 12)
+    world_height = maxi(ufa_saved_size.y if current_location_id == "ufa" else 0, int(ceil(extent.end.y)) + 12)
+    for plot in plots:
+        world_min_x = mini(world_min_x, int(plot["tile_x"]) - 12)
+        world_min_y = mini(world_min_y, int(plot["tile_y"]) - 12)
+        world_width = maxi(world_width, int(plot["tile_x"]) + int(plot["width_tiles"]) + 12)
+        world_height = maxi(world_height, int(plot["tile_y"]) + int(plot["height_tiles"]) + 12)
 
 func _on_api_error(_status: int, message: String) -> void:
     hud.text = "BASHECO | " + message
@@ -168,9 +181,11 @@ func _draw() -> void:
     draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color("#121e29"))
     var view := _visible_tile_bounds()
     # World coordinates remain continuous; only on-screen tiles are rendered.
-    for y in range(view[1], view[3]):
-        for x in range(view[0], view[2]):
-            _tile(x, y, Color("#263e42") if (x + y) % 2 == 0 else Color("#294449"))
+    # At a distant zoom, draw a flat terrain base rather than thousands of tiles.
+    if (view[2] - view[0]) * (view[3] - view[1]) <= MAX_VISIBLE_TILES:
+        for y in range(view[1], view[3]):
+            for x in range(view[0], view[2]):
+                _tile(x, y, Color("#263e42") if (x + y) % 2 == 0 else Color("#294449"))
     # Geography is a read-only backdrop. Playable parcels always render above it.
     geo_background.render(self, view)
     for i in range(plots.size()):
@@ -197,10 +212,10 @@ func _draw() -> void:
 
 func _visible_tile_bounds() -> Array[int]:
     var screen := get_viewport_rect().size
-    var min_x := float(world_width)
-    var min_y := float(world_height)
-    var max_x := 0.0
-    var max_y := 0.0
+    var min_x := INF
+    var min_y := INF
+    var max_x := -INF
+    var max_y := -INF
     for corner in [Vector2.ZERO, Vector2(screen.x, 0), Vector2(0, screen.y), screen]:
         var local: Vector2 = (corner - camera_offset) / zoom_level
         var tx: float = local.x / TILE_W + local.y / TILE_H
@@ -210,8 +225,8 @@ func _visible_tile_bounds() -> Array[int]:
         max_x = maxf(max_x, tx)
         max_y = maxf(max_y, ty)
     return [
-        clampi(int(floor(min_x)) - 2, 0, world_width),
-        clampi(int(floor(min_y)) - 2, 0, world_height),
+        clampi(int(floor(min_x)) - 2, world_min_x, world_width),
+        clampi(int(floor(min_y)) - 2, world_min_y, world_height),
         clampi(int(ceil(max_x)) + 3, 0, world_width),
         clampi(int(ceil(max_y)) + 3, 0, world_height)
     ]
