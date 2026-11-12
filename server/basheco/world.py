@@ -5,13 +5,66 @@ Production land acquisition will require a separate economic transaction.
 """
 from uuid import UUID
 from fastapi import HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from basheco.db import connect
 
 class ConstructRequest(BaseModel):
     company_id: UUID
     plot_id: UUID
     building_type: str
+
+class NewPlotRequest(BaseModel):
+    sector_id: str
+    tile_x: int = Field(ge=0, le=4090)
+    tile_y: int = Field(ge=0, le=4090)
+    zone: str
+
+
+def create_plot(data: NewPlotRequest, account_id: str):
+    """Create a server-validated vacant game parcel, not an OSM/cadastral parcel.
+
+    Requires a logged-in player; an account may provision at most three
+    vacant parcels in a settlement. All spatial checks are transactional.
+    """
+    if data.sector_id not in ("ufa", "mikhailovka"):
+        raise HTTPException(422, "Unknown settlement")
+    if data.zone not in ("commercial", "industrial", "agricultural"):
+        raise HTTPException(422, "Invalid zone")
+    with connect() as conn:
+        # Lock the sector first to serialize competing overlapping requests.
+        sector = conn.execute(
+            "SELECT id,width_tiles,height_tiles FROM world_sectors WHERE id=%s FOR UPDATE",
+            (data.sector_id,),
+        ).fetchone()
+        if not sector:
+            raise HTTPException(404, "Settlement not found")
+        if data.tile_x + 5 > sector["width_tiles"] or data.tile_y + 5 > sector["height_tiles"]:
+            raise HTTPException(422, "Parcel outside settlement coordinate extent")
+        account = conn.execute("SELECT id FROM accounts WHERE id=%s", (account_id,)).fetchone()
+        if not account:
+            raise HTTPException(403, "Account not found")
+        count = conn.execute(
+            "SELECT count(*) AS n FROM world_plots WHERE sector_id=%s",
+            (data.sector_id,),
+        ).fetchone()["n"]
+        if count >= 2000:
+            raise HTTPException(409, "Settlement parcel capacity reached")
+        overlap = conn.execute(
+            "SELECT id FROM world_plots WHERE sector_id=%s "
+            "AND tile_x < %s AND tile_x + width_tiles > %s "
+            "AND tile_y < %s AND tile_y + height_tiles > %s LIMIT 1",
+            (data.sector_id, data.tile_x + 5, data.tile_x, data.tile_y + 5, data.tile_y),
+        ).fetchone()
+        if overlap:
+            raise HTTPException(409, "Parcel overlaps an existing parcel")
+        row = conn.execute(
+            "INSERT INTO world_plots(sector_id,tile_x,tile_y,width_tiles,height_tiles,zone,generated_by_growth) "
+            "VALUES(%s,%s,%s,5,5,%s,true) RETURNING id",
+            (data.sector_id, data.tile_x, data.tile_y, data.zone),
+        ).fetchone()
+        return {"plot_id": str(row["id"]), "sector_id": data.sector_id,
+                "tile_x": data.tile_x, "tile_y": data.tile_y, "zone": data.zone}
+
 
 def sector_map(sector_id: str):
     with connect() as conn:
