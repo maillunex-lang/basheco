@@ -42,7 +42,7 @@ func _ready() -> void:
     building_picker = OptionButton.new()
     for item in CATALOG:
         building_picker.add_item(item["title"])
-    building_picker.item_selected.connect(func(_index: int): _refresh_selection())
+    building_picker.item_selected.connect(func(_index: int): _refresh_selection(); world.overlay.queue_redraw())
     layout.add_child(building_picker)
     selected_info = Label.new()
     selected_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -59,6 +59,7 @@ func _ready() -> void:
     message.text = "Выберите свободный участок на карте"
     layout.add_child(message)
     panel.visible = false
+    visibility_changed.connect(func(): world.overlay.queue_redraw())
     set_process(true)
     _refresh_selection()
     world.get_node("Company").companies_updated.connect(_set_companies)
@@ -96,7 +97,7 @@ func _refresh_selection() -> void:
         var plot: Dictionary = world.plots[world.selected_plot]
         var zone := str(plot.get("zone", ""))
         detail = "%s зона · участок %s×%s клеток" % [ZONE_NAMES.get(zone, zone), str(plot.get("width_tiles", "?")), str(plot.get("height_tiles", "?"))]
-    selected_info.text = detail + "\nЦена и размеры здания пока не определены сервером."
+    selected_info.text = detail + "\nКонтур на карте показывает участок, не размеры здания.\nЦена и размеры здания пока не определены сервером."
     build_button.disabled = busy or _selection_error() != ""
 
 func _set_companies(companies: Array) -> void:

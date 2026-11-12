@@ -221,6 +221,7 @@ func _run() -> void:
     check(build_panel.CATALOG.size() == 3 and build_panel.CATALOG[0]["code"] == "shop", "build catalog matches SQL building types")
     check(build_panel._selection_error() == "Войдите в игру, чтобы строить", "build blocks unauthenticated users")
     check(build_panel.selected_info.text.contains("Цена и размеры здания пока не определены"), "build does not fabricate costs or footprint")
+    check(build_panel.selected_info.text.contains("Контур на карте показывает участок"), "preview is labelled as parcel outline")
     check(build_panel.build_button.disabled, "build action disabled without server-authenticated plot")
     var market = world.get_node("Market")
     market._set_companies([{"id": "test-company-1", "name": "Тестовая компания"}, {"id": "test-company-2", "name": "Другая компания"}])

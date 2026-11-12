@@ -381,6 +381,22 @@ func draw_overlay(canvas: CanvasItem) -> void:
             canvas.draw_colored_polygon(corners, color)
             if str(obj["kind"]) == "house":
                 canvas.draw_polyline(PackedVector2Array([corners[0], corners[1], corners[2], corners[3], corners[0]]), Color("#fff0cb"), 2.0)
+    # Construction preview is only an outline of an existing server parcel.
+    # It is NOT a building footprint, cadastral clearance or server approval.
+    var build_panel = get_node("Build")
+    if build_panel.panel.visible and selected_plot >= 0 and selected_plot < plots.size():
+        var preview: Dictionary = plots[selected_plot]
+        var origin := Vector2i(int(preview["cell_x"]), int(preview["cell_y"]))
+        var extent := Vector2i(int(preview["width_cells"]), int(preview["height_cells"]))
+        if extent.x > 0 and extent.y > 0:
+            var points := PackedVector2Array([
+                project_cell(origin), project_cell(origin + Vector2i(extent.x, 0)),
+                project_cell(origin + extent), project_cell(origin + Vector2i(0, extent.y)),
+                project_cell(origin)
+            ])
+            var valid: bool = build_panel._selection_error().is_empty()
+            var tint := Color("#62e0b6") if valid else Color("#ffb56b")
+            canvas.draw_polyline(points, tint, 4.0, true)
     # Playable parcels always render above the read-only geography.
     if lod() <= 2:
         for i in range(plots.size()):
