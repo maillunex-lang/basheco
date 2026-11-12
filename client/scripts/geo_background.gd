@@ -12,9 +12,12 @@ const TREE_SPRITE := preload("res://assets/kenney/detail_10.png")
 const MAX_BUILDING_SPRITES := 140
 const GEOGRAPHY_CHUNK_TILES := 48
 const MAX_ACTIVE_CHUNKS := 48
+const CHUNKS_PER_FRAME := 2
 var geometry_index: Dictionary = {}
 var spatial_paths: Dictionary = {}
 var spatial_loaded: Dictionary = {}
+var pending_chunks: Array[Vector2i] = []
+var requested_chunks: Array[Vector2i] = []
 var active_chunk_ids: Array[Vector2i] = []
 var features: Array = []
 var cached_geometry: Array = []
@@ -34,6 +37,8 @@ func load_pilot(location_id: String = "ufa") -> void:
     geometry_index.clear()
     spatial_paths.clear()
     spatial_loaded.clear()
+    pending_chunks.clear()
+    requested_chunks.clear()
     active_chunk_ids.clear()
     terrain_segments.clear()
     settlement_boundary.clear()
@@ -79,7 +84,9 @@ func load_pilot(location_id: String = "ufa") -> void:
     if not spatial_paths.is_empty():
         var x := int(origin_tile.x)
         var y := int(origin_tile.y)
-        _refresh_spatial_chunks([x - 30, y - 30, x + 30, y + 30])
+        var initial_bounds: Array[int] = [x - 30, y - 30, x + 30, y + 30]
+        _refresh_spatial_chunks(initial_bounds)
+        process_pending_chunks()
 
 func _rebuild_geometry() -> void:
     cached_geometry.clear()
@@ -244,19 +251,32 @@ func _refresh_spatial_chunks(bounds: Array[int]) -> void:
         return Vector2(a).distance_squared_to(center) < Vector2(b).distance_squared_to(center))
     if desired.size() > MAX_ACTIVE_CHUNKS:
         desired.resize(MAX_ACTIVE_CHUNKS)
-    var changed := desired.size() != active_chunk_ids.size()
-    if not changed:
-        for key in desired:
-            if not spatial_loaded.has(key):
-                changed = true
-                break
-    if not changed:
+    if desired == requested_chunks:
         return
+    requested_chunks = desired
+    pending_chunks.clear()
     for key in spatial_loaded.keys():
         if not desired.has(key):
             spatial_loaded.erase(key)
     for key in desired:
+        if not spatial_loaded.has(key):
+            pending_chunks.append(key)
+    active_chunk_ids.clear()
+    for key in desired:
         if spatial_loaded.has(key):
+            active_chunk_ids.append(key)
+    _rebuild_loaded_spatial_geometry()
+
+func process_pending_chunks() -> bool:
+    # Bounded cooperative streaming: at most two JSON chunks per game frame.
+    # This avoids synchronous mass loading inside _draw, but FileAccess reads
+    # are still on the main thread. Background worker I/O is future work.
+    if pending_chunks.is_empty():
+        return false
+    var loaded_any := false
+    for i in range(mini(CHUNKS_PER_FRAME, pending_chunks.size())):
+        var key: Vector2i = pending_chunks.pop_front()
+        if not requested_chunks.has(key) or not spatial_paths.has(key):
             continue
         var file := FileAccess.open(spatial_paths[key], FileAccess.READ)
         if file == null:
@@ -265,10 +285,16 @@ func _refresh_spatial_chunks(bounds: Array[int]) -> void:
         var chunk: Variant = JSON.parse_string(file.get_as_text())
         if typeof(chunk) == TYPE_DICTIONARY:
             spatial_loaded[key] = chunk.get("features", [])
-    active_chunk_ids = desired
+            active_chunk_ids.append(key)
+            loaded_any = true
+    if loaded_any:
+        _rebuild_loaded_spatial_geometry()
+    return loaded_any
+
+func _rebuild_loaded_spatial_geometry() -> void:
     features.clear()
     var unique: Dictionary = {}
-    for key in desired:
+    for key in requested_chunks:
         for feature in spatial_loaded.get(key, []):
             var id := int(feature.get("id", -1))
             if not unique.has(id):
