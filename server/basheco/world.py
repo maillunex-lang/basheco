@@ -57,7 +57,7 @@ def grow_district(conn, plot):
             y = origin_y + dy * 8
             if x < 0 or y < 0 or x + 5 > sector["width_tiles"] or y + 5 > sector["height_tiles"]:
                 continue
-            if count + created >= 2000:
+            if created >= 8 or count + created >= 2000:
                 return created
             overlaps = conn.execute(
                 "SELECT 1 FROM world_plots WHERE sector_id=%s "
