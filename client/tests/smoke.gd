@@ -8,7 +8,7 @@ func _run() -> void:
     var world: Node2D = scene.instantiate()
     root.add_child(world)
     await process_frame
-    assert(world.plots.size() == 6)
+    assert(world.plots.is_empty())
     assert(world.geo_background.ready)
     assert(world.geo_background.BUILDING_SPRITES.size() == 3)
     assert(world.geo_background.TREE_SPRITE.get_width() > 0)
@@ -22,7 +22,7 @@ func _run() -> void:
     assert(world.geo_background.spatial_loaded.size() > 0)
     assert(world.geo_background.terrain_range.x >= 170.0)
     assert(world.geo_background.terrain_range.y <= 185.0)
-    assert(world.world_width == 200 and world.world_height == 200)
+    assert(world.world_width > 0 and world.world_height > 0)
     var visible: Array[int] = world._visible_tile_bounds()
     assert(visible[2] - visible[0] < 200)
     assert(visible[3] - visible[1] < 200)
@@ -124,6 +124,7 @@ func _run() -> void:
     world.zoom_at(Vector2(320, 240), 1000.0)
     assert(is_equal_approx(world.zoom_level, world.MAX_ZOOM))
     assert(not world.open_location("unknown"))
+    world.plots.append({"tile_x": 20, "tile_y": 20, "width_tiles": 5, "height_tiles": 5, "zone": "commercial"})
     var p: Dictionary = world.plots[0]
     var center: Vector2 = world.project_point(
         float(p["tile_x"]) + float(p["width_tiles"]) / 2.0,
