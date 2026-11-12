@@ -37,10 +37,12 @@
           "name": "Михайловка",
           "kind": "village",
           "center": [
-            55.895,
-            54.803
+            55.8916795,
+            54.8050459
           ],
-          "playable": false
+          "playable": false,
+          "coordinate_source": "https://www.openstreetmap.org/relation/2552635",
+          "previewable": true
         }
       ]
     }
