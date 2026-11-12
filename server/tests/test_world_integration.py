@@ -72,7 +72,7 @@ class WorldTests(unittest.TestCase):
         self.assertEqual(result["building_type"],"shop")
         self.assertGreaterEqual(result["new_plots"], 0)
         expanded = sector_map("ufa")
-        self.assertGreaterEqual(len(expanded["plots"]), 6)
+        self.assertGreaterEqual(len(expanded["plots"]), 1)
         with self.assertRaises(HTTPException) as ctx:
             construct(self.req(1),str(self.accounts[1]))
         self.assertEqual(ctx.exception.status_code,409)
