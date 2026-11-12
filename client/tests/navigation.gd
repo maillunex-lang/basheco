@@ -58,7 +58,7 @@ func _run() -> void:
     for result in search_results:
         if result["kind"] == "settlement" and result["data"]["name"] == "Михайловка":
             named += 1
-    check(named == duplicate_mikh, "full-republic search finds all namesakes")
+    check(named == 1, "public search shows only built Mikhailovka")
     menu._select_district(ufimsky)
     menu._enter_location(mikh)
     var cell: Array = mikh["cell"]
@@ -67,14 +67,12 @@ func _run() -> void:
     check(not menu.visible, "menu closes on successful jump")
 
     menu.open_map()
+    var expected: Vector2i = world.camera_center_cell()
     menu._enter_location(far_away)
-    var far_cell: Array = far_away["cell"]
-    var expected := Vector2i(int(far_cell[0]), int(far_cell[1]))
-    check(world.camera_center_cell() == expected, "camera reaches distant Sterlitamak, not atlas clamp")
-    check(world.location_title() == "СТЕРЛИТАМАК", "distant settlement is named")
-    check(world.geo_background.nav_bounds[1] <= expected.y and world.geo_background.nav_bounds[3] >= expected.y, "bounds include Sterlitamak")
+    check(world.camera_center_cell() == expected, "unbuilt Sterlitamak cannot be selected")
+    check(world.geo_background.nav_bounds[1] <= int(far_away["cell"][1]) and world.geo_background.nav_bounds[3] >= int(far_away["cell"][1]), "geographic bounds still include all official settlements")
     world._focus_on_district()
-    check(world.camera_center_cell() == expected, "focus control returns to chosen settlement")
+    check(world.camera_center_cell() == expected, "focus control returns to chosen built settlement")
 
     menu._enter_location({"id": "not-real", "name": "Нет координат", "cell": null})
     check(world.camera_center_cell() == expected, "unconfirmed coordinates cannot move camera")
