@@ -38,6 +38,10 @@ func _ready() -> void:
     button.custom_minimum_size.y = 48
     button.pressed.connect(_login)
     layout.add_child(button)
+    var register_button := Button.new()
+    register_button.text = "Регистрация"
+    register_button.pressed.connect(_register)
+    layout.add_child(register_button)
     var demo_button := Button.new()
     demo_button.text = "Посмотреть карту без входа"
     demo_button.custom_minimum_size.y = 48
