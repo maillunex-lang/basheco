@@ -2,6 +2,7 @@ extends CanvasLayer
 ## Company creation after login; no local persistence.
 var api: Node
 var http: HTTPRequest
+var starter_http: HTTPRequest
 var panel: PanelContainer
 var name_field: LineEdit
 signal companies_updated(companies: Array)
@@ -15,6 +16,9 @@ func _ready() -> void:
     http = HTTPRequest.new()
     add_child(http)
     http.request_completed.connect(_on_response)
+    starter_http = HTTPRequest.new()
+    add_child(starter_http)
+    starter_http.request_completed.connect(_on_starter_response)
     api.authenticated.connect(load_companies)
     panel = PanelContainer.new()
     panel.position = Vector2(770, 82)
@@ -79,3 +83,13 @@ func _on_response(_result: int, status: int, _headers: PackedStringArray, body: 
     companies = parsed.get("companies", [])
     status_label.text = "Мои компании: " + str(companies.size()) if companies.size() > 0 else "Создайте первую компанию"
     companies_updated.emit(companies)
+    if not companies.is_empty():
+        var headers := PackedStringArray(["Authorization: Bearer " + api.access_token])
+        starter_http.request(api.base_url + "/v1/companies/" + str(companies[0]["id"]) + "/starter-grant", headers, HTTPClient.METHOD_POST, "{}")
+
+func _on_starter_response(_result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+    if status != 200:
+        return
+    var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+    if typeof(parsed) == TYPE_DICTIONARY and int(parsed.get("granted_kopecks", 0)) > 0:
+        status_label.text = "Стартовый капитал: 10 000 игровых ₽ начислен!"
