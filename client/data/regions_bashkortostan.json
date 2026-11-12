@@ -22,7 +22,7 @@
             55.9587,
             54.7351
           ],
-          "sector_id": "ufa-prototype-01",
+          "sector_id": "ufa",
           "playable": true
         }
       ]
@@ -40,7 +40,7 @@
             55.8916795,
             54.8050459
           ],
-          "playable": false,
+          "playable": true,
           "coordinate_source": "https://www.openstreetmap.org/relation/2552635",
           "previewable": true
         }
