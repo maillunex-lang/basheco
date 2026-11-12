@@ -32,7 +32,7 @@ func login(email: String, password: String) -> void:
     if err != OK:
         request_failed.emit(0, "Ошибка соединения")
 
-func load_sector(sector_id: String = "ufa-prototype-01") -> void:
+func load_sector(sector_id: String = "ufa") -> void:
     if access_token.is_empty():
         request_failed.emit(401, "Необходим вход в игру")
         return
@@ -41,6 +41,19 @@ func load_sector(sector_id: String = "ufa-prototype-01") -> void:
     var err := _http.request(base_url + "/v1/world/sectors/" + sector_id.uri_encode(), headers)
     if err != OK:
         request_failed.emit(0, "Ошибка соединения")
+
+func load_viewport(sector_id: String, bounds: Array[int]) -> void:
+    if access_token.is_empty() or _http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+        return
+    if bounds.size() != 4:
+        return
+    _request_kind = "viewport"
+    var headers := PackedStringArray(["Authorization: Bearer " + access_token])
+    var query := "?min_x=%d&min_y=%d&max_x=%d&max_y=%d" % [bounds[0], bounds[1], bounds[2], bounds[3]]
+    var err := _http.request(base_url + "/v1/world/sectors/" + sector_id.uri_encode() + "/viewport" + query, headers)
+    if err != OK:
+        request_failed.emit(0, "Ошибка загрузки участков")
+
 
 func _on_request_completed(_result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     if status != 200:
