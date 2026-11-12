@@ -10,7 +10,7 @@ var chunk_paths: Dictionary = {}
 var loaded_chunks: Dictionary = {}
 var bounds := [55.9710, 54.7377, 55.9730, 54.7395]
 var parent_world: Node2D
-var visible_layer := true
+var visible_layer := false  # Experimental OSM geometry is not aligned with game parcels.
 var _key_down := false
 var attribution: Label
 
@@ -32,6 +32,7 @@ func _ready() -> void:
     attribution.add_theme_font_size_override("font_size", 13)
     attribution.add_theme_color_override("font_color", Color("#f3f6f0"))
     attribution.position = Vector2(20, 54)
+    attribution.visible = visible_layer
     attribution.mouse_filter = Control.MOUSE_FILTER_IGNORE
     add_child(attribution)
     queue_redraw()
@@ -66,6 +67,8 @@ func _geo_to_screen(coord: Array) -> Vector2:
 func _process(_delta: float) -> void:
     if Input.is_key_pressed(KEY_G) and not _key_down:
         visible_layer = not visible_layer
+        if attribution != null:
+            attribution.visible = visible_layer
         queue_redraw()
     _key_down = Input.is_key_pressed(KEY_G)
 
@@ -107,11 +110,21 @@ func _draw() -> void:
                 pts.append(_geo_to_screen(coord))
             if pts.size() < 2:
                 continue
+            # Skip out-of-bounds geometry until map projection and clipping are implemented.
+            # OSM objects may extend far beyond this small offline snapshot.
+            var within_snapshot := true
+            for coord in feature.get("coordinates", []):
+                var grid := _geo_to_grid(coord)
+                if grid.x < MARGIN or grid.y < MARGIN or grid.x > MARGIN + MAP_TILES or grid.y > MARGIN + MAP_TILES:
+                    within_snapshot = false
+                    break
+            if not within_snapshot:
+                continue
             if feature.get("kind") == "road":
                 draw_polyline(pts, Color("#d5c4a1"), 3.0, true)
             elif feature.get("kind") == "building" and pts.size() >= 4:
-                draw_colored_polygon(pts, Color("#a8abb2"))
-                draw_polyline(pts, Color("#394852"), 1.0, true)
+                # Never draw large opaque OSM building polygons over playable plots.
+                draw_polyline(pts, Color("#708b94", 0.65), 1.5, true)
 
 func refresh() -> void:
     queue_redraw()
