@@ -43,6 +43,12 @@ def create_plot(data: NewPlotRequest, account_id: str):
         account = conn.execute("SELECT id FROM accounts WHERE id=%s", (account_id,)).fetchone()
         if not account:
             raise HTTPException(403, "Account not found")
+        created = conn.execute(
+            "SELECT count(*) AS n FROM world_plots WHERE sector_id=%s AND created_by_account_id=%s",
+            (data.sector_id, account_id),
+        ).fetchone()["n"]
+        if created >= 3:
+            raise HTTPException(409, "Alpha parcel quota reached")
         count = conn.execute(
             "SELECT count(*) AS n FROM world_plots WHERE sector_id=%s",
             (data.sector_id,),
@@ -58,9 +64,9 @@ def create_plot(data: NewPlotRequest, account_id: str):
         if overlap:
             raise HTTPException(409, "Parcel overlaps an existing parcel")
         row = conn.execute(
-            "INSERT INTO world_plots(sector_id,tile_x,tile_y,width_tiles,height_tiles,zone,generated_by_growth) "
-            "VALUES(%s,%s,%s,5,5,%s,true) RETURNING id",
-            (data.sector_id, data.tile_x, data.tile_y, data.zone),
+            "INSERT INTO world_plots(sector_id,tile_x,tile_y,width_tiles,height_tiles,zone,generated_by_growth,created_by_account_id) "
+            "VALUES(%s,%s,%s,5,5,%s,true,%s) RETURNING id",
+            (data.sector_id, data.tile_x, data.tile_y, data.zone, account_id),
         ).fetchone()
         return {"plot_id": str(row["id"]), "sector_id": data.sector_id,
                 "tile_x": data.tile_x, "tile_y": data.tile_y, "zone": data.zone}
