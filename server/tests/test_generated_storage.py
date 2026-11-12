@@ -45,3 +45,9 @@ class GeneratedStorageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PublicationGuardTests(unittest.TestCase):
+    def test_other_locations_cannot_publish(self):
+        from basheco.generated_storage import publish_location
+        with self.assertRaises(ValueError):
+            publish_location("S80745000001")
