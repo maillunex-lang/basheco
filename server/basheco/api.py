@@ -311,7 +311,12 @@ def transfer(data: TransferRequest, account_id: str = Depends(current_user)):
     return {"transfer_id": str(inserted["id"]), "replayed": False}
 
 # Prototype sector is deliberately fictional; do not represent it as an OSM map.
-from basheco.world import ConstructRequest, construct, sector_map, sector_viewport
+from basheco.world import ConstructRequest, construct, sector_map, sector_viewport, NewPlotRequest, create_plot
+
+@app.post("/v1/world/plots")
+def provision_world_plot(data: NewPlotRequest, account_id: str = Depends(current_user)):
+    return create_plot(data, account_id)
+
 
 @app.get("/v1/world/sectors/{sector_id}/viewport")
 def world_viewport(sector_id: str, min_x: int, min_y: int, max_x: int, max_y: int):
