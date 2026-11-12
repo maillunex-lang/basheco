@@ -11,6 +11,7 @@ from pathlib import Path
 
 from basheco.geo_registry import point_in_rings, ring_points
 from basheco.location_generator import DEFAULT_ROOT, build
+from basheco.land_constraints import assess_cells, footprint_cells
 from basheco.world_grid import CELL_METRES, cell_to_metre_corner
 
 
@@ -47,6 +48,7 @@ def audit(root: Path = DEFAULT_ROOT) -> dict:
                     problems.append({"kind": obj["kind"], "cell": [x, y],
                                      "sample_m": [px, py]})
                     break
+        land = assess_cells(footprint_cells(location), None)
         results.append({"settlement_id": selection["settlement_id"],
                         "municipality_id": mid,
                         "sampled_points": checked,
@@ -54,7 +56,8 @@ def audit(root: Path = DEFAULT_ROOT) -> dict:
                         "boundary_conflicts": problems,
                         "water_verified": False, "terrain_verified": False,
                         "land_rights_verified": False,
-                        "safe_to_publish": False})
+                        "land_constraints": land,
+                        "safe_to_publish": not problems and land["safe_to_build"]})
     counts = Counter("boundary_pass" if r["boundary_sample_pass"] else "boundary_conflict"
                      for r in results)
     return {"schema": "basheco.geography_audit/1",
@@ -62,10 +65,11 @@ def audit(root: Path = DEFAULT_ROOT) -> dict:
             "candidate_count": len(results),
             "boundary_sample_pass": counts["boundary_pass"],
             "boundary_conflict": counts["boundary_conflict"],
-            "safe_to_publish": 0,
+            "safe_to_publish": sum(r["safe_to_publish"] for r in results),
             "limitations": ["Simplified OSM administrative boundaries (40 m tolerance)",
                             "Five sample points per object do not prove full footprint containment",
                             "No verified water, terrain, protected land, or parcel rights layers",
+                            "No land constraint evidence is shipped; all cells are unknown",
                             "Existing candidate geometry is not modified"],
             "locations": results}
 
