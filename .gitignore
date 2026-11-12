@@ -6,3 +6,7 @@ __pycache__/
 .venv/
 .pytest_cache/
 .godot/
+
+client/build/
+client/data/*.local-prepull.json
+client/scripts/*.gd.uid
