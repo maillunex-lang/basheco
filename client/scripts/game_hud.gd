@@ -7,6 +7,7 @@ var frame: PanelContainer
 var geo_credit: Label
 var performance_label: Label
 var performance_elapsed := 0.0
+const CREDIT := "© OpenStreetMap contributors · ODbL · Рельеф: SRTM / OpenTopoData · "
 
 func _ready() -> void:
     world = get_parent()
@@ -17,7 +18,7 @@ func _ready() -> void:
     row.add_theme_constant_override("separation", 12)
     frame.add_child(row)
     district_label = Label.new()
-    district_label.text = "УФА  •  ЦЕНТРАЛЬНЫЙ КВАРТАЛ"
+    district_label.text = "РЕСПУБЛИКА БАШКОРТОСТАН"
     district_label.add_theme_color_override("font_color", Color("#e8f2ef"))
     row.add_child(district_label)
     var divider := VSeparator.new()
@@ -45,7 +46,7 @@ func _ready() -> void:
     plus.pressed.connect(func(): world.zoom_at(get_viewport().get_visible_rect().size * 0.5, 1.2))
     row.add_child(plus)
     geo_credit = Label.new()
-    geo_credit.text = "© OpenStreetMap contributors · ODbL · Рельеф: SRTM / OpenTopoData · пилот"
+    geo_credit.text = CREDIT + "покрытие частичное"
     geo_credit.add_theme_color_override("font_color", Color("#dbe6e2"))
     geo_credit.add_theme_font_size_override("font_size", 13)
     geo_credit.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -71,7 +72,9 @@ func _process(delta: float) -> void:
     var fps := Performance.get_monitor(Performance.TIME_FPS)
     var memory_mb := Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0
     var active: int = world.geo_background.active_chunk_ids.size()
-    performance_label.text = "FPS: %d  |  Godot RAM: %.1f MB  |  чанков: %d  |  масштаб: %.2f×" % [int(fps), memory_mb, active, world.zoom_level]
+    var cell: Vector2i = world.camera_center_cell()
+    var lonlat: PackedFloat64Array = world.camera_center_lonlat()
+    performance_label.text = "FPS: %d  |  Godot RAM: %.1f MB  |  чанков: %d  |  масштаб: %.3f×  |  клетка %d, %d  |  %.5f° в.д. %.5f° с.ш." % [int(fps), memory_mb, active, world.zoom_level, cell.x, cell.y, lonlat[0], lonlat[1]]
 
 func _surface() -> StyleBoxFlat:
     var style := StyleBoxFlat.new()
@@ -103,5 +106,6 @@ func _companies_updated(companies: Array) -> void:
 func update_geography_credit(location_id: String) -> void:
     if geo_credit == null:
         return
-    var place := "Михайловка" if location_id == "mikhailovka" else "Уфа"
-    geo_credit.text = "© OpenStreetMap contributors · ODbL · SRTM / OpenTopoData · " + place + " (пилот)"
+    var settlements: Dictionary = world.geo_background.settlements
+    var place := str(settlements[location_id]["name"]) if settlements.has(location_id) else "Республика Башкортостан"
+    geo_credit.text = CREDIT + place + " · покрытие частичное"

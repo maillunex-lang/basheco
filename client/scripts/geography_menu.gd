@@ -1,5 +1,6 @@
 extends CanvasLayer
-## Lightweight geographic navigation; no world geometry is loaded here.
+## Lightweight geographic navigation. Choosing a settlement moves the camera inside
+## the one continuous world; it never loads a separate map.
 const CATALOG := "res://data/regions_bashkortostan.json"
 var panel: PanelContainer
 var title_label: Label
@@ -43,7 +44,7 @@ func _ready() -> void:
     list_box.add_theme_constant_override("separation", 9)
     scroll.add_child(list_box)
     var note := Label.new()
-    note.text = "География: демонстрационный каталог. Полный список и границы будут добавлены после проверки источников."
+    note.text = "Единая карта республики: выбор населённого пункта переносит камеру. Каталог неполный, география импортирована частично."
     note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     content.add_child(note)
     hide()
@@ -84,7 +85,7 @@ func _render() -> void:
             var item: Dictionary = location
             var playable := bool(item.get("playable", false))
             var previewable := bool(item.get("previewable", false))
-            var caption := "Играть в локации" if playable else ("Посмотреть реальную карту (пилот)" if previewable else "Пока недоступно в Alpha")
+            var caption := "Перейти на карте" if playable or previewable else "Пока недоступно в Alpha"
             _entry(str(item.get("name", "")), caption, func(): _enter_location(item), playable or previewable)
 
 func _entry(name: String, subtitle: String, action: Callable, enabled: bool) -> void:

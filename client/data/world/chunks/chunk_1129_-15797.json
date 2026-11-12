@@ -1,0 +1,1 @@
+{"schema":"basheco.world_chunk/2","grid_version":"basheco-grid/1","crs":"EPSG:32640","chunk":[1129,-15797],"bounds_m":[433536,6065664,433920,6066048],"features":[{"uid":"ufa-center-osm:way/371346311#1","osm_id":"way/371346311","kind":"road","subtype":"footway","source":"ufa-center-osm","location_id":"ufa","geom":"line","points":[[433739.45,6066048.0],[433736.63,6066041.95]]}]}

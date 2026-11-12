@@ -1,30 +1,40 @@
 extends Node2D
-## Isometric prototype, deliberately synthetic. Server remains authoritative.
+## The single isometric world of BASHECO. Server remains authoritative.
+## Every settlement lives in ONE continuous grid (EPSG:32640, 6 m cells, see
+## world_grid.gd). Choosing a settlement moves the camera; it never loads another map.
+##
+## Precision: global cells are integers. Everything drawn is expressed relative
+## to render_origin, a chunk-aligned global cell that follows the camera, so the
+## 32-bit canvas never sees million-sized coordinates.
 const CityChunks = preload("res://scripts/city_chunks.gd")
 const GeoBackground = preload("res://scripts/geo_background.gd")
+const WorldGrid = preload("res://scripts/world_grid.gd")
+const WorldOverlay = preload("res://scripts/world_overlay.gd")
 var geo_background = GeoBackground.new()
-var current_location_id := "ufa"
-var ufa_saved_plots: Array[Dictionary] = []
-var ufa_saved_size := Vector2i(INITIAL_GRID_SIZE, INITIAL_GRID_SIZE)
-const INITIAL_GRID_SIZE := 200
-var world_width := INITIAL_GRID_SIZE
-var world_height := INITIAL_GRID_SIZE
-var world_min_x := 0
-var world_min_y := 0
+const DEFAULT_SETTLEMENT := "ufa"
+var current_location_id := DEFAULT_SETTLEMENT
 const MAX_VISIBLE_TILES := 18000
-const MIN_ZOOM := 0.85
+const MIN_ZOOM := 0.004
 const MAX_ZOOM := 2.4
+const DEFAULT_ZOOM := 1.15
 const TILE_W := 64.0
 const TILE_H := 32.0
+const REBASE_CELLS := 256.0
+const PARCEL_REQUEST_HALF_SIZE := 96
+## Level of detail by zoom: 0 full detail, 1 no sprites/grid, 2 main roads and
+## areas only, 3 republic overview (settlement outlines and names, no chunks).
+const LOD_MIN_ZOOM := [0.85, 0.3, 0.12]
 const ZONES := {
     "commercial": Color("#e0ad57"),
     "industrial": Color("#5f93a9"),
     "agricultural": Color("#72b883")
 }
 var plots: Array[Dictionary] = []
+var unplaced_plot_count := 0
 var _last_viewport_bounds: Array[int] = []
 var _viewport_cooldown := 0.0
-var zoom_level := 1.15
+var zoom_level := DEFAULT_ZOOM
+var render_origin := Vector2i.ZERO
 var camera_offset := Vector2.ZERO
 var camera_initialized := false
 var world_visible := false
@@ -34,6 +44,7 @@ var pinch_distance := 0.0
 var selected_plot := -1
 var fade_occluding_buildings := false
 var occlusion_button: Button
+var overlay: Node2D
 const ZONE_ICONS := {
     "commercial": preload("res://assets/icons/shop.svg"),
     "industrial": preload("res://assets/icons/workshop.svg"),
@@ -42,9 +53,10 @@ const ZONE_ICONS := {
 var hud: Label
 
 func _ready() -> void:
-    ufa_saved_plots = plots.duplicate(true)
-    geo_background.load_pilot()
-    _focus_on_district()
+    geo_background.load_world(self)
+    overlay = WorldOverlay.new()
+    overlay.name = "Overlay"
+    add_child(overlay)
     hud = Label.new()
     hud.position = Vector2(18, 12)
     hud.add_theme_color_override("font_color", Color.WHITE)
@@ -57,6 +69,7 @@ func _ready() -> void:
     occlusion_button.pressed.connect(_toggle_occlusion)
     add_child(occlusion_button)
     occlusion_button.visible = false
+    _focus_on_district()
     _update_hud()
     $API.sector_loaded.connect(_on_sector_loaded)
     $API.request_failed.connect(_on_api_error)
@@ -64,8 +77,8 @@ func _ready() -> void:
     queue_redraw()
 
 func _process(_delta: float) -> void:
-    if world_visible and geo_background.process_pending_chunks():
-        queue_redraw()
+    if world_visible and geo_background.process_pending_chunks(self):
+        overlay.queue_redraw()
     if world_visible:
         _viewport_cooldown = maxf(0.0, _viewport_cooldown - _delta)
         if _viewport_cooldown <= 0.0 and not $API.access_token.is_empty():
@@ -74,14 +87,71 @@ func _process(_delta: float) -> void:
 func _toggle_occlusion() -> void:
     fade_occluding_buildings = not fade_occluding_buildings
     occlusion_button.text = "Показать здания" if fade_occluding_buildings else "Скрыть здания"
-    queue_redraw()
+    overlay.queue_redraw()
 
+# --- Camera in the single world -------------------------------------------------
 
-func _focus_on_district() -> void:
-    var focus_tile: Vector2 = geo_background.origin_tile if current_location_id != "ufa" else Vector2(12.0, 12.0)
-    camera_offset = get_viewport_rect().size * 0.5 - iso(focus_tile.x, focus_tile.y) * zoom_level
+func lod() -> int:
+    for level in range(LOD_MIN_ZOOM.size()):
+        if zoom_level >= float(LOD_MIN_ZOOM[level]):
+            return level
+    return LOD_MIN_ZOOM.size()
+
+## Zoom quantised to ~12% steps; cached line widths are redrawn only between steps.
+func zoom_band() -> float:
+    return pow(1.12, roundf(log(zoom_level) / log(1.12)))
+
+func iso(x: float, y: float) -> Vector2:
+    return Vector2((x - y) * TILE_W * 0.5, (x + y) * TILE_H * 0.5)
+
+## Screen position of a point given in cells relative to render_origin.
+func project_point(x: float, y: float) -> Vector2:
+    return iso(x, y) * zoom_level + camera_offset
+
+## Screen position of a global cell corner (plus an optional sub-cell offset).
+func project_cell(cell: Vector2i, offset: Vector2 = Vector2.ZERO) -> Vector2:
+    var local := Vector2(cell - render_origin) + offset
+    return project_point(local.x, local.y)
+
+func screen_to_local(point: Vector2) -> Vector2:
+    var flat: Vector2 = (point - camera_offset) / zoom_level
+    return Vector2(flat.x / TILE_W + flat.y / TILE_H, flat.y / TILE_H - flat.x / TILE_W)
+
+func screen_to_cell(point: Vector2) -> Vector2i:
+    var local := screen_to_local(point)
+    return render_origin + Vector2i(floori(local.x), floori(local.y))
+
+func camera_center_cell() -> Vector2i:
+    return screen_to_cell(get_viewport_rect().size * 0.5)
+
+## Camera centre as 64-bit continuous global cell coordinates [x, y].
+func camera_center_exact() -> PackedFloat64Array:
+    var local := screen_to_local(get_viewport_rect().size * 0.5)
+    return PackedFloat64Array([float(render_origin.x) + local.x, float(render_origin.y) + local.y])
+
+## WGS84 [lon, lat] under the camera centre (for display and on-device checks).
+func camera_center_lonlat() -> PackedFloat64Array:
+    var exact := camera_center_exact()
+    var metres := WorldGrid.cell_to_metres(exact[0], exact[1])
+    return WorldGrid.metres_to_lonlat(metres[0], metres[1])
+
+func center_on_cell(cell: Vector2i, fraction: Vector2 = Vector2(0.5, 0.5)) -> void:
+    render_origin = WorldGrid.chunk_origin_cell(WorldGrid.cell_to_chunk(cell.x, cell.y))
+    var local := Vector2(cell - render_origin) + fraction
+    camera_offset = get_viewport_rect().size * 0.5 - iso(local.x, local.y) * zoom_level
     camera_initialized = true
     _camera_changed()
+
+func _focus_on_district() -> void:
+    # "⌖ Район": back to the nearest settlement's sourced area at working zoom.
+    var target := DEFAULT_SETTLEMENT
+    if camera_initialized:
+        target = geo_background.nearest_settlement(camera_center_cell())
+    if not geo_background.settlements.has(target):
+        camera_initialized = true
+        return
+    zoom_level = DEFAULT_ZOOM
+    center_on_cell(geo_background.settlements[target]["focus_cell"])
 
 func zoom_at(screen_point: Vector2, factor: float) -> void:
     var old_zoom := zoom_level
@@ -90,86 +160,123 @@ func zoom_at(screen_point: Vector2, factor: float) -> void:
     _camera_changed()
 
 func _clamp_camera() -> void:
-    var size := get_viewport_rect().size
-    var center := size * 0.5
-    var margin := size * 0.8
-    var corners := [
-        iso(float(world_min_x), float(world_min_y)) * zoom_level,
-        iso(float(world_width), float(world_min_y)) * zoom_level,
-        iso(float(world_min_x), float(world_height)) * zoom_level,
-        iso(float(world_width), float(world_height)) * zoom_level
-    ]
-    var minimum: Vector2 = corners[0]
-    var maximum: Vector2 = corners[0]
-    for corner in corners:
-        minimum = minimum.min(corner)
-        maximum = maximum.max(corner)
-    camera_offset.x = clampf(camera_offset.x, center.x - maximum.x - margin.x, center.x - minimum.x + margin.x)
-    camera_offset.y = clampf(camera_offset.y, center.y - maximum.y - margin.y, center.y - minimum.y + margin.y)
+    # The camera may roam the whole navigable region between settlements.
+    var bounds: Array[int] = geo_background.nav_bounds
+    if bounds[2] <= bounds[0] or bounds[3] <= bounds[1]:
+        return
+    var exact := camera_center_exact()
+    var shift := Vector2(clampf(exact[0], bounds[0], bounds[2]) - exact[0],
+        clampf(exact[1], bounds[1], bounds[3]) - exact[1])
+    if shift != Vector2.ZERO:
+        camera_offset -= iso(shift.x, shift.y) * zoom_level
+
+func _rebase_origin() -> void:
+    # Keep drawn coordinates small: move the origin to the camera's chunk.
+    var local := screen_to_local(get_viewport_rect().size * 0.5)
+    if absf(local.x) <= REBASE_CELLS and absf(local.y) <= REBASE_CELLS:
+        return
+    var cell := render_origin + Vector2i(floori(local.x), floori(local.y))
+    var origin := WorldGrid.chunk_origin_cell(WorldGrid.cell_to_chunk(cell.x, cell.y))
+    var delta := origin - render_origin
+    camera_offset += iso(float(delta.x), float(delta.y)) * zoom_level
+    render_origin = origin
 
 func _camera_changed() -> void:
     _clamp_camera()
-    if has_node("OSM") and is_node_ready():
-        $OSM.refresh()
+    _rebase_origin()
+    var here: String = geo_background.settlement_at(camera_center_cell())
+    if here != current_location_id:
+        current_location_id = here
+        _update_hud()
+        if has_node("HUD") and $HUD.is_node_ready():
+            $HUD.update_geography_credit(here)
+    geo_background.update_view(self)
     queue_redraw()
+    if overlay != null:
+        overlay.queue_redraw()
 
 func _on_viewport_resized() -> void:
     if camera_initialized and not world_visible:
         _focus_on_district()
     _camera_changed()
 
+## Global cells covered by the screen: [min_x, min_y, max_x, max_y) with a small margin.
+func visible_cell_bounds() -> Array[int]:
+    var screen := get_viewport_rect().size
+    var min_x := INF
+    var min_y := INF
+    var max_x := -INF
+    var max_y := -INF
+    for corner in [Vector2.ZERO, Vector2(screen.x, 0), Vector2(0, screen.y), screen]:
+        var local := screen_to_local(corner)
+        min_x = minf(min_x, local.x)
+        min_y = minf(min_y, local.y)
+        max_x = maxf(max_x, local.x)
+        max_y = maxf(max_y, local.y)
+    return [render_origin.x + int(floor(min_x)) - 2, render_origin.y + int(floor(min_y)) - 2,
+        render_origin.x + int(ceil(max_x)) + 3, render_origin.y + int(ceil(max_y)) + 3]
+
+# --- Server data ---------------------------------------------------------------
+
 func connect_to_server(url: String, token: String) -> void:
     $API.configure(url, token)
+    refresh_parcels()
+
+func refresh_parcels() -> void:
     _last_viewport_bounds.clear()
+    _viewport_cooldown = 0.0
     _request_camera_parcels()
 
 func _on_sector_loaded(data: Dictionary) -> void:
-    var received: Array = data["plots"]
+    # Plots are addressed only by server-assigned world cells. Legacy settlement
+    # tile_x/tile_y are history and are never used for placement on the map.
+    var selected_id := ""
+    if selected_plot >= 0 and selected_plot < plots.size():
+        selected_id = str(plots[selected_plot].get("id", ""))
     var verified: Array[Dictionary] = []
-    for item in received:
+    for item in data["plots"]:
         if typeof(item) != TYPE_DICTIONARY:
             return
-        if not item.has("tile_x") or not item.has("tile_y") or not item.has("zone") or not item.has("width_tiles") or not item.has("height_tiles"):
+        if not item.has("zone") or not item.has("width_tiles") or not item.has("height_tiles"):
             return
-        verified.append(item)
-    if current_location_id == "ufa":
-        ufa_saved_plots = verified.duplicate(true)
+        if item.get("world_cell_x") == null or item.get("world_cell_y") == null:
+            continue  # not placed on the world grid by the server: never guess a position
+        var plot: Dictionary = item.duplicate()
+        plot["cell_x"] = int(item["world_cell_x"])
+        plot["cell_y"] = int(item["world_cell_y"])
+        plot["width_cells"] = int(item["width_tiles"])
+        plot["height_cells"] = int(item["height_tiles"])
+        verified.append(plot)
     plots = verified
+    unplaced_plot_count = int(data.get("unplaced_plot_count", 0))
     world_visible = true
     occlusion_button.visible = true
-    var sector: Dictionary = data.get("sector", {})
-    ufa_saved_size = Vector2i(0, 0)
-    _apply_geography_extent()
     selected_plot = -1
+    for i in range(plots.size()):
+        if not selected_id.is_empty() and str(plots[i].get("id", "")) == selected_id:
+            selected_plot = i
     _update_hud()
     _camera_changed()
 
+## Move the camera to a settlement of the same world. Returns false if unknown.
 func open_location(location_id: String) -> bool:
-    if location_id != "ufa" and location_id != "mikhailovka":
+    if not geo_background.ready or not geo_background.settlements.has(location_id):
         return false
-    geo_background.load_pilot(location_id)
-    if not geo_background.ready:
-        return false
-    current_location_id = location_id
-    plots.clear()
-    _last_viewport_bounds.clear()
-    _viewport_cooldown = 0.0
-    _apply_geography_extent()
     selected_plot = -1
     world_visible = true
     occlusion_button.visible = true
-    _focus_on_district()
+    zoom_level = DEFAULT_ZOOM
+    center_on_cell(geo_background.settlements[location_id]["focus_cell"])
+    refresh_parcels()
     _update_hud()
-    if has_node("HUD"):
-        $HUD.update_geography_credit(location_id)
-    queue_redraw()
     return true
 
 func _request_camera_parcels() -> void:
-    var visible: Array[int] = _visible_tile_bounds()
-    var cx := int((visible[0] + visible[2]) / 2)
-    var cy := int((visible[1] + visible[3]) / 2)
-    var bounds: Array[int] = [cx - 96, cy - 96, cx + 96, cy + 96]
+    if $API.access_token.is_empty() or lod() > 1:
+        return
+    var center := camera_center_cell()
+    var bounds: Array[int] = [center.x - PARCEL_REQUEST_HALF_SIZE, center.y - PARCEL_REQUEST_HALF_SIZE,
+        center.x + PARCEL_REQUEST_HALF_SIZE, center.y + PARCEL_REQUEST_HALF_SIZE]
     if bounds == _last_viewport_bounds:
         _viewport_cooldown = 1.0
         return
@@ -177,110 +284,92 @@ func _request_camera_parcels() -> void:
         return
     _last_viewport_bounds = bounds
     _viewport_cooldown = 0.5
-    $API.load_viewport(current_location_id, bounds)
-
-func _apply_geography_extent() -> void:
-    # Extent is measured from sourced geographic coverage; player plots can expand it.
-    # The geographic extract is not a claim about the official settlement boundary.
-    var extent: Rect2 = geo_background.tile_extent()
-    world_min_x = mini(0, int(floor(extent.position.x)) - 12)
-    world_min_y = mini(0, int(floor(extent.position.y)) - 12)
-    world_width = maxi(0, int(ceil(extent.end.x)) + 12)
-    world_height = maxi(0, int(ceil(extent.end.y)) + 12)
-    for plot in plots:
-        world_min_x = mini(world_min_x, int(plot["tile_x"]) - 12)
-        world_min_y = mini(world_min_y, int(plot["tile_y"]) - 12)
-        world_width = maxi(world_width, int(plot["tile_x"]) + int(plot["width_tiles"]) + 12)
-        world_height = maxi(world_height, int(plot["tile_y"]) + int(plot["height_tiles"]) + 12)
+    $API.load_viewport(bounds)
 
 func _on_api_error(_status: int, message: String) -> void:
     hud.text = "BASHECO | " + message
     if has_node("HUD"):
         $HUD.district_label.text = "Ошибка карты: " + message
 
-func iso(x: float, y: float) -> Vector2:
-    return Vector2((x - y) * TILE_W * 0.5, (x + y) * TILE_H * 0.5)
-
-func project_point(x: float, y: float) -> Vector2:
-    return iso(x, y) * zoom_level + camera_offset
+# --- Drawing -------------------------------------------------------------------
 
 func _draw() -> void:
     if not world_visible:
         return
     draw_rect(Rect2(Vector2.ZERO, get_viewport_rect().size), Color("#121e29"))
-    var view := _visible_tile_bounds()
-    # World coordinates remain continuous; only on-screen tiles are rendered.
-    # At a distant zoom, draw a flat terrain base rather than thousands of tiles.
-    if (view[2] - view[0]) * (view[3] - view[1]) <= MAX_VISIBLE_TILES:
-        for y in range(view[1], view[3]):
-            for x in range(view[0], view[2]):
-                _tile(x, y, Color("#263e42") if (x + y) % 2 == 0 else Color("#294449"))
-    # Geography is a read-only backdrop. Playable parcels always render above it.
-    geo_background.render(self, view)
-    for i in range(plots.size()):
-        var p: Dictionary = plots[i]
-        if not CityChunks.plot_intersects_bounds(p, view):
-            continue
-        var px := int(p["tile_x"])
-        var py := int(p["tile_y"])
-        if px >= view[2] or py >= view[3] or px + int(p["width_tiles"]) <= view[0] or py + int(p["height_tiles"]) <= view[1]:
-            continue
-        var color: Color = ZONES.get(str(p["zone"]), Color.GRAY)
-        if i == selected_plot:
-            color = color.lightened(0.32)
-        for dy in range(int(p["height_tiles"])):
-            for dx in range(int(p["width_tiles"])):
-                _tile(int(p["tile_x"]) + dx, int(p["tile_y"]) + dy, color)
-        var center := project_point(float(p["tile_x"]) + float(p["width_tiles"]) / 2.0,
-            float(p["tile_y"]) + float(p["height_tiles"]) / 2.0)
-        var icon: Texture2D = ZONE_ICONS.get(str(p["zone"]))
-        if icon != null:
-            var icon_size := 44.0 * zoom_level
-            draw_texture_rect(icon, Rect2(center - Vector2(icon_size * 0.5, icon_size * 0.8), Vector2(icon_size, icon_size)), false)
-        draw_circle(center, 3.0, Color.WHITE)
-        if i == selected_plot and p.get("building_id") != null:
-            # Selected building: visible outline even when icon texture is small.
-            var left := float(p["tile_x"])
-            var top := float(p["tile_y"])
-            var right := left + float(p["width_tiles"])
-            var bottom := top + float(p["height_tiles"])
+    var view := visible_cell_bounds()
+    var nav: Array[int] = geo_background.nav_bounds
+    var left := maxi(view[0], nav[0])
+    var top := maxi(view[1], nav[1])
+    var right := mini(view[2], nav[2])
+    var bottom := mini(view[3], nav[3])
+    if right <= left or bottom <= top:
+        return
+    # One continuous ground plane. Cells are never instantiated: only the lines of
+    # the on-screen part of the grid are drawn, and only at full detail.
+    var corners := PackedVector2Array([project_cell(Vector2i(left, top)), project_cell(Vector2i(right, top)),
+        project_cell(Vector2i(right, bottom)), project_cell(Vector2i(left, bottom))])
+    draw_colored_polygon(corners, Color("#27414a"))
+    if lod() == 0 and (right - left) * (bottom - top) <= MAX_VISIBLE_TILES:
+        for x in range(left, right + 1):
+            draw_line(project_cell(Vector2i(x, top)), project_cell(Vector2i(x, bottom)), Color("#142a32"), 1.0)
+        for y in range(top, bottom + 1):
+            draw_line(project_cell(Vector2i(left, y)), project_cell(Vector2i(right, y)), Color("#142a32"), 1.0)
+
+## Called by the Overlay node, which sits above the geography chunks.
+func draw_overlay(canvas: CanvasItem) -> void:
+    if not world_visible:
+        return
+    var view := visible_cell_bounds()
+    geo_background.render_sprites(self, canvas)
+    # Playable parcels always render above the read-only geography.
+    if lod() <= 2:
+        for i in range(plots.size()):
+            var p: Dictionary = plots[i]
+            if not CityChunks.plot_intersects_bounds(p, view):
+                continue
+            var cell := Vector2i(int(p["cell_x"]), int(p["cell_y"]))
+            var width := int(p["width_cells"])
+            var height := int(p["height_cells"])
+            var color: Color = ZONES.get(str(p["zone"]), Color.GRAY)
+            if i == selected_plot:
+                color = color.lightened(0.32)
             var outline := PackedVector2Array([
-                project_point(left, top), project_point(right, top),
-                project_point(right, bottom), project_point(left, bottom),
-                project_point(left, top)
+                project_cell(cell), project_cell(cell + Vector2i(width, 0)),
+                project_cell(cell + Vector2i(width, height)), project_cell(cell + Vector2i(0, height)),
+                project_cell(cell)
             ])
-            draw_polyline(outline, Color("#ffed83"), 3.5, true)
-            draw_circle(center, 7.0 * zoom_level, Color("#ffed83", 0.85))
+            canvas.draw_colored_polygon(PackedVector2Array([outline[0], outline[1], outline[2], outline[3]]), color)
+            if lod() == 0:
+                for d in range(1, width):
+                    canvas.draw_line(project_cell(cell + Vector2i(d, 0)), project_cell(cell + Vector2i(d, height)), Color("#142a32"), 1.0)
+                for d in range(1, height):
+                    canvas.draw_line(project_cell(cell + Vector2i(0, d)), project_cell(cell + Vector2i(width, d)), Color("#142a32"), 1.0)
+            canvas.draw_polyline(outline, Color("#142a32"), 1.0)
+            var center := project_cell(cell, Vector2(float(width) / 2.0, float(height) / 2.0))
+            var icon: Texture2D = ZONE_ICONS.get(str(p["zone"]))
+            if icon != null and lod() <= 1:
+                var icon_size := 44.0 * zoom_level
+                canvas.draw_texture_rect(icon, Rect2(center - Vector2(icon_size * 0.5, icon_size * 0.8), Vector2(icon_size, icon_size)), false)
+            canvas.draw_circle(center, 3.0, Color.WHITE)
+            if i == selected_plot and p.get("building_id") != null:
+                # Selected building: visible outline even when icon texture is small.
+                canvas.draw_polyline(outline, Color("#ffed83"), 3.5, true)
+                canvas.draw_circle(center, 7.0 * zoom_level, Color("#ffed83", 0.85))
+    if lod() >= 2:
+        # Far zoom: every settlement of the one world, at its real position.
+        var font := ThemeDB.fallback_font
+        var screen := Rect2(Vector2.ZERO, get_viewport_rect().size).grow(40.0)
+        for id in geo_background.settlement_order:
+            var settlement: Dictionary = geo_background.settlements[id]
+            var where := project_cell(settlement["focus_cell"], Vector2(0.5, 0.5))
+            if not screen.has_point(where):
+                continue
+            canvas.draw_circle(where, 6.0, Color("#e2bf72"))
+            canvas.draw_circle(where, 3.0, Color("#142634"))
+            canvas.draw_string(font, where + Vector2(10, 6), str(settlement["name"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#f3f6f0"))
 
-func _visible_tile_bounds() -> Array[int]:
-    var screen := get_viewport_rect().size
-    var min_x := INF
-    var min_y := INF
-    var max_x := -INF
-    var max_y := -INF
-    for corner in [Vector2.ZERO, Vector2(screen.x, 0), Vector2(0, screen.y), screen]:
-        var local: Vector2 = (corner - camera_offset) / zoom_level
-        var tx: float = local.x / TILE_W + local.y / TILE_H
-        var ty: float = local.y / TILE_H - local.x / TILE_W
-        min_x = minf(min_x, tx)
-        min_y = minf(min_y, ty)
-        max_x = maxf(max_x, tx)
-        max_y = maxf(max_y, ty)
-    return [
-        clampi(int(floor(min_x)) - 2, world_min_x, world_width),
-        clampi(int(floor(min_y)) - 2, world_min_y, world_height),
-        clampi(int(ceil(max_x)) + 3, world_min_x, world_width),
-        clampi(int(ceil(max_y)) + 3, world_min_y, world_height)
-    ]
-
-func _tile(x: int, y: int, color: Color) -> void:
-    var corners := PackedVector2Array([
-        project_point(x, y), project_point(x + 1, y),
-        project_point(x + 1, y + 1), project_point(x, y + 1)
-    ])
-    draw_colored_polygon(corners, color)
-    draw_polyline(PackedVector2Array([corners[0],corners[1],corners[2],corners[3],corners[0]]),
-        Color("#142a32"), 1.0)
+# --- Input ---------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
     if not world_visible or get_node("Login").panel.visible:
@@ -294,7 +383,6 @@ func _unhandled_input(event: InputEvent) -> void:
             dragging = event.pressed
         elif event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
             _select_at(event.position)
-        queue_redraw()
     elif event is InputEventMouseMotion and dragging:
         camera_offset += event.relative
         _camera_changed()
@@ -325,33 +413,32 @@ func _unhandled_input(event: InputEvent) -> void:
                 var midpoint: Vector2 = (positions[0] + positions[1]) * 0.5
                 zoom_at(midpoint, distance / pinch_distance)
             pinch_distance = distance
-        queue_redraw()
-    _camera_changed()
 
 func _select_at(point: Vector2) -> void:
-    var local := (point - camera_offset) / zoom_level
-    var tx := local.x / TILE_W + local.y / TILE_H
-    var ty := local.y / TILE_H - local.x / TILE_W
+    var cell := screen_to_cell(point)
     selected_plot = -1
     for i in range(plots.size()):
         var p: Dictionary = plots[i]
-        if tx >= float(p["tile_x"]) and tx < float(p["tile_x"] + p["width_tiles"]) and \
-            ty >= float(p["tile_y"]) and ty < float(p["tile_y"] + p["height_tiles"]):
+        if cell.x >= int(p["cell_x"]) and cell.x < int(p["cell_x"]) + int(p["width_cells"]) and \
+            cell.y >= int(p["cell_y"]) and cell.y < int(p["cell_y"]) + int(p["height_cells"]):
             selected_plot = i
             break
     _update_hud()
     if selected_plot >= 0:
         $Economy.choose_plot(plots[selected_plot])
-    $OSM.refresh()
-    queue_redraw()
+    overlay.queue_redraw()
+
+func location_title() -> String:
+    if geo_background.settlements.has(current_location_id):
+        return str(geo_background.settlements[current_location_id]["name"]).to_upper()
+    return "РЕСПУБЛИКА БАШКОРТОСТАН"
 
 func _update_hud() -> void:
     var suffix := "Выберите участок"
     if selected_plot >= 0:
         var p: Dictionary = plots[selected_plot]
         suffix = "Участок %d · %s" % [selected_plot + 1, str(p["zone"])]
-    var location_name := "МИХАЙЛОВКА" if current_location_id == "mikhailovka" else "УФА"
-    var location_detail := "Пилот географии · только просмотр" if current_location_id != "ufa" else suffix
-    hud.text = location_name + "  /  " + location_detail
-    if has_node("HUD"):
-        $HUD.district_label.text = location_name + "  /  " + location_detail
+    if hud != null:
+        hud.text = location_title() + "  /  " + suffix
+    if has_node("HUD") and $HUD.is_node_ready():
+        $HUD.district_label.text = location_title() + "  /  " + suffix

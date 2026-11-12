@@ -1,0 +1,471 @@
+{
+ "schema": "basheco.world_atlas/2",
+ "grid_version": "basheco-grid/1",
+ "crs": "EPSG:32640",
+ "source_crs": "EPSG:4326",
+ "cell_metres": 6,
+ "chunk_cells": 64,
+ "origin_easting": 0,
+ "origin_northing": 0,
+ "cell_x": "floor((E - origin_easting) / cell_metres)",
+ "cell_y": "floor((origin_northing - N) / cell_metres)",
+ "chunk": "floor(cell / chunk_cells)",
+ "units": "points are [easting, northing] metres, rounded to 0.01 m",
+ "license": "ODbL 1.0",
+ "attribution": "© OpenStreetMap contributors",
+ "coverage": "partial",
+ "coverage_note": "Real geography is imported only inside each source bbox. Everything else in the republic is empty until its sources are imported; emptiness is missing data, not open land.",
+ "chunk_path_template": "res://data/world/chunks/chunk_{x}_{y}.json",
+ "navigation_bounds_cells": [
+  69699,
+  -1015627,
+  76339,
+  -1006122
+ ],
+ "feature_counts": {
+  "building": 776,
+  "forest": 6,
+  "road": 159,
+  "water": 3
+ },
+ "source_object_count": 944,
+ "exported_piece_count": 1094,
+ "large_feature_count": 2,
+ "settlements": [
+  {
+   "id": "ufa",
+   "name": "Уфа",
+   "kind": "city",
+   "focus_lonlat": [
+    55.971999999999994,
+    54.7386
+   ],
+   "focus_m": [
+    433814.70719311596,
+    6066188.552466614
+   ],
+   "focus_cell": [
+    72302,
+    -1011032
+   ],
+   "focus_chunk": [
+    1129,
+    -15798
+   ],
+   "focus_definition": "centre of sourced OSM extract coverage, not an official centre",
+   "sources": [
+    "ufa-center-osm"
+   ],
+   "boundary_source_url": "https://www.openstreetmap.org/relation/1549169"
+  },
+  {
+   "id": "mikhailovka",
+   "name": "Михайловка",
+   "kind": "village",
+   "focus_lonlat": [
+    55.8925,
+    54.805499999999995
+   ],
+   "focus_m": [
+    428814.0460423138,
+    6073710.262913412
+   ],
+   "focus_cell": [
+    71469,
+    -1012286
+   ],
+   "focus_chunk": [
+    1116,
+    -15817
+   ],
+   "focus_definition": "centre of sourced OSM extract coverage, not an official centre",
+   "sources": [
+    "mikhailovka-osm"
+   ],
+   "boundary_source_url": "https://www.openstreetmap.org/relation/2552635"
+  }
+ ],
+ "sources": [
+  {
+   "id": "ufa-center-osm",
+   "location_id": "ufa",
+   "source": "OpenStreetMap",
+   "source_url": "https://api.openstreetmap.org/api/0.6/map?bbox=55.971,54.7377,55.973,54.7395",
+   "downloaded_utc": "2026-11-12T10:51:51Z",
+   "license": "ODbL 1.0",
+   "attribution": "© OpenStreetMap contributors",
+   "bbox_lonlat": [
+    55.971,
+    54.7377,
+    55.973,
+    54.7395
+   ],
+   "coverage_ring_m": [
+    [
+     433748.86,
+     6066089.35
+    ],
+    [
+     433751.8,
+     6066289.64
+    ],
+    [
+     433880.55,
+     6066287.75
+    ],
+    [
+     433877.62,
+     6066087.47
+    ],
+    [
+     433748.86,
+     6066089.35
+    ]
+   ],
+   "feature_counts": {
+    "building": 6,
+    "forest": 5,
+    "road": 17
+   },
+   "skipped": {
+    "incomplete_geometry": 0,
+    "open_area": 0,
+    "relation_not_assembled": 1
+   },
+   "coverage": "Only objects intersecting bbox_lonlat; ways are kept whole and may extend past it",
+   "limitations": "Multipolygon holes are not exported; relations with members outside the extract are skipped"
+  },
+  {
+   "id": "mikhailovka-osm",
+   "location_id": "mikhailovka",
+   "source": "OpenStreetMap",
+   "source_url": "https://api.openstreetmap.org/api/0.6/map?bbox=55.881,54.797,55.904,54.814",
+   "downloaded_utc": "2026-11-12T10:51:55Z",
+   "license": "ODbL 1.0",
+   "attribution": "© OpenStreetMap contributors",
+   "bbox_lonlat": [
+    55.881,
+    54.797,
+    55.904,
+    54.814
+   ],
+   "coverage_ring_m": [
+    [
+     428059.8,
+     6072776.22
+    ],
+    [
+     428090.0,
+     6074667.78
+    ],
+    [
+     429567.98,
+     6074644.43
+    ],
+    [
+     429538.41,
+     6072752.86
+    ],
+    [
+     428059.8,
+     6072776.22
+    ]
+   ],
+   "feature_counts": {
+    "building": 770,
+    "forest": 1,
+    "road": 142,
+    "water": 3
+   },
+   "skipped": {
+    "incomplete_geometry": 0,
+    "open_area": 0,
+    "relation_not_assembled": 0
+   },
+   "coverage": "Only objects intersecting bbox_lonlat; ways are kept whole and may extend past it",
+   "limitations": "Multipolygon holes are not exported; relations with members outside the extract are skipped"
+  }
+ ],
+ "chunks": [
+  [
+   1110,
+   -15816,
+   1
+  ],
+  [
+   1111,
+   -15817,
+   1
+  ],
+  [
+   1111,
+   -15816,
+   1
+  ],
+  [
+   1112,
+   -15817,
+   1
+  ],
+  [
+   1112,
+   -15815,
+   1
+  ],
+  [
+   1113,
+   -15818,
+   1
+  ],
+  [
+   1113,
+   -15817,
+   1
+  ],
+  [
+   1113,
+   -15815,
+   3
+  ],
+  [
+   1114,
+   -15820,
+   3
+  ],
+  [
+   1114,
+   -15819,
+   10
+  ],
+  [
+   1114,
+   -15818,
+   27
+  ],
+  [
+   1114,
+   -15817,
+   29
+  ],
+  [
+   1114,
+   -15816,
+   21
+  ],
+  [
+   1114,
+   -15815,
+   8
+  ],
+  [
+   1115,
+   -15822,
+   1
+  ],
+  [
+   1115,
+   -15821,
+   1
+  ],
+  [
+   1115,
+   -15820,
+   29
+  ],
+  [
+   1115,
+   -15819,
+   89
+  ],
+  [
+   1115,
+   -15818,
+   101
+  ],
+  [
+   1115,
+   -15817,
+   87
+  ],
+  [
+   1115,
+   -15816,
+   56
+  ],
+  [
+   1115,
+   -15815,
+   13
+  ],
+  [
+   1116,
+   -15820,
+   39
+  ],
+  [
+   1116,
+   -15819,
+   84
+  ],
+  [
+   1116,
+   -15818,
+   80
+  ],
+  [
+   1116,
+   -15817,
+   75
+  ],
+  [
+   1116,
+   -15816,
+   85
+  ],
+  [
+   1116,
+   -15815,
+   34
+  ],
+  [
+   1117,
+   -15820,
+   30
+  ],
+  [
+   1117,
+   -15819,
+   75
+  ],
+  [
+   1117,
+   -15818,
+   33
+  ],
+  [
+   1117,
+   -15815,
+   2
+  ],
+  [
+   1118,
+   -15820,
+   4
+  ],
+  [
+   1118,
+   -15819,
+   1
+  ],
+  [
+   1118,
+   -15815,
+   2
+  ],
+  [
+   1118,
+   -15814,
+   2
+  ],
+  [
+   1118,
+   -15813,
+   2
+  ],
+  [
+   1119,
+   -15813,
+   2
+  ],
+  [
+   1119,
+   -15812,
+   2
+  ],
+  [
+   1119,
+   -15811,
+   2
+  ],
+  [
+   1120,
+   -15811,
+   2
+  ],
+  [
+   1120,
+   -15810,
+   2
+  ],
+  [
+   1121,
+   -15810,
+   2
+  ],
+  [
+   1122,
+   -15810,
+   2
+  ],
+  [
+   1123,
+   -15810,
+   2
+  ],
+  [
+   1124,
+   -15810,
+   2
+  ],
+  [
+   1124,
+   -15809,
+   2
+  ],
+  [
+   1125,
+   -15809,
+   2
+  ],
+  [
+   1126,
+   -15809,
+   1
+  ],
+  [
+   1126,
+   -15808,
+   1
+  ],
+  [
+   1126,
+   -15807,
+   1
+  ],
+  [
+   1126,
+   -15806,
+   1
+  ],
+  [
+   1128,
+   -15798,
+   3
+  ],
+  [
+   1129,
+   -15798,
+   28
+  ],
+  [
+   1129,
+   -15797,
+   1
+  ],
+  [
+   1130,
+   -15798,
+   1
+  ]
+ ]
+}

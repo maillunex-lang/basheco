@@ -1,0 +1,207 @@
+{
+ "schema": "basheco.control_points/1",
+ "crs": "EPSG:32640",
+ "source_crs": "EPSG:4326",
+ "grid_version": "basheco-grid/1",
+ "computed_with": "pyproj (PROJ) EPSG:4326 -> EPSG:32640",
+ "points": [
+  {
+   "name": "probe-central-meridian",
+   "kind": "projection_probe",
+   "lon": 57.0,
+   "lat": 54.0,
+   "easting": 499999.9999999992,
+   "northing": 5983521.661990591,
+   "inverse_lon": 57.00000000000001,
+   "inverse_lat": 54.0,
+   "cell": [
+    83333,
+    -997254
+   ],
+   "chunk": [
+    1302,
+    -15583
+   ]
+  },
+  {
+   "name": "probe-west-of-zone",
+   "kind": "projection_probe",
+   "lon": 53.2,
+   "lat": 52.0,
+   "easting": 239174.14460799337,
+   "northing": 5767858.376005859,
+   "inverse_lon": 53.2,
+   "inverse_lat": 52.0,
+   "cell": [
+    39862,
+    -961310
+   ],
+   "chunk": [
+    622,
+    -15021
+   ]
+  },
+  {
+   "name": "probe-north-east",
+   "kind": "projection_probe",
+   "lon": 59.9,
+   "lat": 56.5,
+   "easting": 678494.866530832,
+   "northing": 6265498.641467195,
+   "inverse_lon": 59.9,
+   "inverse_lat": 56.5,
+   "cell": [
+    113082,
+    -1044250
+   ],
+   "chunk": [
+    1766,
+    -16317
+   ]
+  },
+  {
+   "name": "probe-south",
+   "kind": "projection_probe",
+   "lon": 58.3,
+   "lat": 51.6,
+   "easting": 590037.1874453245,
+   "northing": 5717351.151677346,
+   "inverse_lon": 58.3,
+   "inverse_lat": 51.599999999999994,
+   "cell": [
+    98339,
+    -952892
+   ],
+   "chunk": [
+    1536,
+    -14889
+   ]
+  },
+  {
+   "name": "probe-zone-west-edge",
+   "kind": "projection_probe",
+   "lon": 54.0,
+   "lat": 55.5,
+   "easting": 310519.18915264047,
+   "northing": 6154522.913107877,
+   "inverse_lon": 54.0,
+   "inverse_lat": 55.5,
+   "cell": [
+    51753,
+    -1025754
+   ],
+   "chunk": [
+    808,
+    -16028
+   ]
+  },
+  {
+   "name": "ufa-focus",
+   "kind": "settlement_focus",
+   "lon": 55.971999999999994,
+   "lat": 54.7386,
+   "easting": 433814.70719311596,
+   "northing": 6066188.552466614,
+   "inverse_lon": 55.971999999999994,
+   "inverse_lat": 54.7386,
+   "cell": [
+    72302,
+    -1011032
+   ],
+   "chunk": [
+    1129,
+    -15798
+   ]
+  },
+  {
+   "name": "ufa-bbox-0",
+   "kind": "source_bbox_corner",
+   "lon": 55.971,
+   "lat": 54.7377,
+   "easting": 433748.8582555548,
+   "northing": 6066089.3548239395,
+   "inverse_lon": 55.971,
+   "inverse_lat": 54.7377,
+   "cell": [
+    72291,
+    -1011015
+   ],
+   "chunk": [
+    1129,
+    -15798
+   ]
+  },
+  {
+   "name": "ufa-bbox-1",
+   "kind": "source_bbox_corner",
+   "lon": 55.973,
+   "lat": 54.7395,
+   "easting": 433880.55329903454,
+   "northing": 6066287.751062331,
+   "inverse_lon": 55.973000000000006,
+   "inverse_lat": 54.7395,
+   "cell": [
+    72313,
+    -1011048
+   ],
+   "chunk": [
+    1129,
+    -15798
+   ]
+  },
+  {
+   "name": "mikhailovka-focus",
+   "kind": "settlement_focus",
+   "lon": 55.8925,
+   "lat": 54.805499999999995,
+   "easting": 428814.0460423138,
+   "northing": 6073710.262913412,
+   "inverse_lon": 55.8925,
+   "inverse_lat": 54.80549999999998,
+   "cell": [
+    71469,
+    -1012286
+   ],
+   "chunk": [
+    1116,
+    -15817
+   ]
+  },
+  {
+   "name": "mikhailovka-bbox-0",
+   "kind": "source_bbox_corner",
+   "lon": 55.881,
+   "lat": 54.797,
+   "easting": 428059.8045285885,
+   "northing": 6072776.220655378,
+   "inverse_lon": 55.881,
+   "inverse_lat": 54.797,
+   "cell": [
+    71343,
+    -1012130
+   ],
+   "chunk": [
+    1114,
+    -15815
+   ]
+  },
+  {
+   "name": "mikhailovka-bbox-1",
+   "kind": "source_bbox_corner",
+   "lon": 55.904,
+   "lat": 54.814,
+   "easting": 429567.9797640422,
+   "northing": 6074644.43018118,
+   "inverse_lon": 55.904,
+   "inverse_lat": 54.81399999999999,
+   "cell": [
+    71594,
+    -1012441
+   ],
+   "chunk": [
+    1118,
+    -15820
+   ]
+  }
+ ]
+}

@@ -1,4 +1,5 @@
 extends Node
+const WorldGrid = preload("res://scripts/world_grid.gd")
 ## API transport. Never persist bearer tokens to disk.
 signal sector_loaded(data: Dictionary)
 signal authenticated()
@@ -42,22 +43,23 @@ func load_sector(sector_id: String = "ufa") -> void:
     if err != OK:
         request_failed.emit(0, "Ошибка соединения")
 
-func load_viewport(sector_id: String, bounds: Array[int]) -> void:
+## Parcels of every settlement inside a rectangle of GLOBAL world cells.
+func load_viewport(bounds: Array[int]) -> void:
     if access_token.is_empty() or _http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
         return
     if bounds.size() != 4:
         return
     _request_kind = "viewport"
     var headers := PackedStringArray(["Authorization: Bearer " + access_token])
-    var query := "?min_x=%d&min_y=%d&max_x=%d&max_y=%d" % [bounds[0], bounds[1], bounds[2], bounds[3]]
-    var err := _http.request(base_url + "/v1/world/sectors/" + sector_id.uri_encode() + "/viewport" + query, headers)
+    var query := "?min_cell_x=%d&min_cell_y=%d&max_cell_x=%d&max_cell_y=%d" % [bounds[0], bounds[1], bounds[2], bounds[3]]
+    var err := _http.request(base_url + "/v1/world/viewport" + query, headers)
     if err != OK:
         request_failed.emit(0, "Ошибка загрузки участков")
 
 
 func _on_request_completed(_result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
     if status != 200:
-        request_failed.emit(status, "Ошибка авторизации" if _request_kind == "login" else "Сервер не вернул сектор")
+        request_failed.emit(status, "Ошибка авторизации" if _request_kind == "login" else "Сервер не вернул карту")
         return
     var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
     if _request_kind == "login":
@@ -67,7 +69,15 @@ func _on_request_completed(_result: int, status: int, _headers: PackedStringArra
         else:
             request_failed.emit(0, "Неверный ответ авторизации")
         return
-    if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("plots") or not parsed.has("sector"):
+    if typeof(parsed) != TYPE_DICTIONARY or typeof(parsed.get("plots")) != TYPE_ARRAY:
+        request_failed.emit(0, "Неверный формат карты")
+        return
+    if _request_kind == "viewport":
+        # The server is authoritative for the grid: refuse to place plots from another one.
+        if typeof(parsed.get("grid")) != TYPE_DICTIONARY or not WorldGrid.matches(parsed["grid"]):
+            request_failed.emit(0, "Версия карты сервера не совпадает с клиентом")
+            return
+    elif not parsed.has("sector"):
         request_failed.emit(0, "Неверный формат карты")
         return
     sector_loaded.emit(parsed)

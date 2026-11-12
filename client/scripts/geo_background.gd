@@ -1,395 +1,400 @@
 extends RefCounted
-## Read-only real-world background. Never turns OSM buildings into playable plots.
-const SOURCES := {
-    "ufa": "res://data/spatial/ufa/manifest.json",
-    "mikhailovka": "res://data/spatial/mikhailovka/manifest.json"
-}
-var metres_per_tile := 6.0  # Visual pilot only; not a surveyed gameplay scale.
-var origin_tile := Vector2(25.0, 25.0)
-const MAX_FEATURES := 10000
+## Real geography of the single BASHECO world (data/world, EPSG:32640).
+## There is one atlas and one coordinate system for every settlement. Chunks of
+## 64x64 global cells are streamed around the camera and released when far away.
+## OSM objects are read-only background and never become playable plots.
+const WorldGrid = preload("res://scripts/world_grid.gd")
+const ChunkNode = preload("res://scripts/geo_chunk_node.gd")
+const ATLAS_DIR := "res://data/world/"
+const ATLAS_SCHEMA := "basheco.world_atlas/2"
+const CHUNK_SCHEMA := "basheco.world_chunk/2"
 const BUILDING_SPRITES := [preload("res://assets/kenney/building_45.png"), preload("res://assets/kenney/building_55.png"), preload("res://assets/kenney/building_115.png")]
 const TREE_SPRITE := preload("res://assets/kenney/detail_10.png")
 const MAX_BUILDING_SPRITES := 140
-const GEOGRAPHY_CHUNK_TILES := 48
-const MAX_ACTIVE_CHUNKS := 48
+const MAX_TREE_SPRITES := 60
+const MAX_ACTIVE_CHUNKS := 64
 const CHUNKS_PER_FRAME := 2
-var geometry_index: Dictionary = {}
-var spatial_paths: Dictionary = {}
-var spatial_loaded: Dictionary = {}
-var pending_chunks: Array[Vector2i] = []
-var requested_chunks: Array[Vector2i] = []
-var active_chunk_ids: Array[Vector2i] = []
-var features: Array = []
-var cached_geometry: Array = []
-var terrain_segments: Array = []
-var terrain_range := Vector2.ZERO
-var settlement_boundary: Dictionary = {}
-var boundary_rings: Array = []
+const LOAD_RING_CHUNKS := 1      # polygons may reach one chunk past their home chunk
+const STREAMING_MAX_LOD := 2     # at overview zoom no detail chunks are held at all
 var manifest: Dictionary = {}
+var settlements: Dictionary = {}       # id -> {name, kind, focus_cell, rings, anchor}
+var settlement_order: Array[String] = []
+var chunk_index: Dictionary = {}       # Vector2i global chunk -> feature count
+var loaded: Dictionary = {}            # Vector2i -> ChunkNode
+var uid_owner: Dictionary = {}         # feature uid -> Vector2i chunk that draws it
+var requested_chunks: Array[Vector2i] = []
+var pending_chunks: Array[Vector2i] = []
+var active_chunk_ids: Array[Vector2i] = []
+var static_nodes: Array = []
+var terrain_range: Dictionary = {}     # settlement id -> Vector2(min, max) metres
+var nav_bounds: Array[int] = [0, 0, 0, 0]
+var layer: Node2D
 var ready := false
+var stats := {"loads": 0, "evictions": 0, "duplicates": 0, "rejected": 0}
 
-func load_pilot(location_id: String = "ufa") -> void:
+static func _read_json(path: String) -> Variant:
+    var file := FileAccess.open(path, FileAccess.READ)
+    if file == null:
+        return null
+    return JSON.parse_string(file.get_as_text())
+
+## Convert atlas points [[E, N], ...] to cells relative to anchor (64-bit math first).
+static func to_relative(points: Array, anchor: Vector2i) -> PackedVector2Array:
+    var result := PackedVector2Array()
+    for point in points:
+        if typeof(point) != TYPE_ARRAY or point.size() < 2:
+            return PackedVector2Array()
+        var cell := WorldGrid.metres_to_cell_f(float(point[0]), float(point[1]))
+        result.append(Vector2(cell[0] - float(anchor.x), cell[1] - float(anchor.y)))
+    return result
+
+func load_world(parent: Node2D) -> void:
     ready = false
-    origin_tile = Vector2(150.0, 180.0) if location_id == "mikhailovka" else Vector2(25.0, 25.0)
-    metres_per_tile = 6.0
-    features.clear()
-    cached_geometry.clear()
-    geometry_index.clear()
-    spatial_paths.clear()
-    spatial_loaded.clear()
-    pending_chunks.clear()
-    requested_chunks.clear()
-    active_chunk_ids.clear()
-    terrain_segments.clear()
-    settlement_boundary.clear()
-    boundary_rings.clear()
-    terrain_range = Vector2.ZERO
-    manifest.clear()
-    if not SOURCES.has(location_id):
+    var data: Variant = _read_json(ATLAS_DIR + "manifest.json")
+    if typeof(data) != TYPE_DICTIONARY or str(data.get("schema", "")) != ATLAS_SCHEMA:
+        push_error("World atlas missing or of another format")
         return
-    var file := FileAccess.open(SOURCES[location_id], FileAccess.READ)
-    if file == null:
+    if not WorldGrid.matches(data):
+        push_error("World atlas uses another grid than this client")
         return
-    var data: Variant = JSON.parse_string(file.get_as_text())
-    if typeof(data) != TYPE_DICTIONARY:
-        return
-    manifest = data.get("manifest", data)
-    if data.has("spatial_chunks"):
-        for entry in data["spatial_chunks"]:
-            spatial_paths[Vector2i(int(entry["x"]), int(entry["y"]))] = str(entry["path"])
-    elif data.has("chunk_paths"):
-        for path in data["chunk_paths"]:
-            var chunk_file := FileAccess.open(str(path), FileAccess.READ)
-            if chunk_file == null:
-                features.clear()
-                return
-            var chunk: Variant = JSON.parse_string(chunk_file.get_as_text())
-            if typeof(chunk) != TYPE_DICTIONARY:
-                features.clear()
-                return
-            features.append_array(chunk.get("features", []))
-    else:
-        features = data.get("features", [])
-    if str(manifest.get("location_id", "")) != location_id:
-        return
-    if str(manifest.get("projection", "")) != "local_equirectangular_metres":
-        return
-    if features.size() > MAX_FEATURES:
-        features.clear()
-        return
-    _rebuild_geometry()
-    _load_elevation(location_id)
-    _load_boundary(location_id)
+    manifest = data
+    layer = Node2D.new()
+    layer.name = "Geography2D"
+    parent.add_child(layer)
+    for entry in manifest.get("chunks", []):
+        chunk_index[Vector2i(int(entry[0]), int(entry[1]))] = int(entry[2])
+    var bounds: Array = manifest.get("navigation_bounds_cells", [0, 0, 0, 0])
+    nav_bounds = [int(bounds[0]), int(bounds[1]), int(bounds[2]), int(bounds[3])]
+    for item in manifest.get("settlements", []):
+        var id := str(item["id"])
+        var focus := Vector2i(int(item["focus_cell"][0]), int(item["focus_cell"][1]))
+        settlements[id] = {"name": str(item["name"]), "kind": str(item.get("kind", "")),
+            "focus_cell": focus, "anchor": WorldGrid.chunk_origin_cell(WorldGrid.cell_to_chunk(focus.x, focus.y)),
+            "rings": []}
+        settlement_order.append(id)
+    _load_boundaries()
+    _load_elevation()
+    _load_coverage()
+    _load_large()
     ready = true
-    if not spatial_paths.is_empty():
-        var x := int(origin_tile.x)
-        var y := int(origin_tile.y)
-        var initial_bounds: Array[int] = [x - 30, y - 30, x + 30, y + 30]
-        _refresh_spatial_chunks(initial_bounds)
-        process_pending_chunks()
 
-func _rebuild_geometry() -> void:
-    cached_geometry.clear()
-    geometry_index.clear()
-    for feature in features:
-        var coords: Array = feature.get("points_m", [])
-        if coords.size() < 2:
+func _static_node(anchor: Vector2i, features: Array, node_name: String) -> void:
+    var node: Node2D = ChunkNode.new()
+    node.name = node_name
+    node.anchor_cell = anchor
+    node.features = features
+    layer.add_child(node)
+    static_nodes.append(node)
+
+func _load_boundaries() -> void:
+    var data: Variant = _read_json(ATLAS_DIR + "boundaries.json")
+    if typeof(data) != TYPE_DICTIONARY or str(data.get("crs", "")) != WorldGrid.CRS:
+        return
+    for boundary in data.get("boundaries", []):
+        var id := str(boundary.get("location_id", ""))
+        if not settlements.has(id):
             continue
-        var tiles := PackedVector2Array()
-        var minimum := Vector2(INF, INF)
-        var maximum := Vector2(-INF, -INF)
-        for coord in coords:
-            if typeof(coord) != TYPE_ARRAY or coord.size() != 2:
-                tiles.clear()
-                break
-            var tile := to_tile(coord)
-            tiles.append(tile)
-            minimum = minimum.min(tile)
-            maximum = maximum.max(tile)
-        if tiles.size() >= 2:
-            var feature_index := cached_geometry.size()
-            cached_geometry.append({"kind": str(feature.get("kind", "")), "tiles": tiles, "minimum": minimum, "maximum": maximum})
-            var left := floori(minimum.x / GEOGRAPHY_CHUNK_TILES)
-            var top := floori(minimum.y / GEOGRAPHY_CHUNK_TILES)
-            var right := floori(maximum.x / GEOGRAPHY_CHUNK_TILES)
-            var bottom := floori(maximum.y / GEOGRAPHY_CHUNK_TILES)
-            # Guard against malformed huge geometry occupying every chunk.
-            if (right - left + 1) * (bottom - top + 1) > 256:
-                continue
-            for cy in range(top, bottom + 1):
-                for cx in range(left, right + 1):
-                    var key := Vector2i(cx, cy)
-                    if not geometry_index.has(key):
-                        geometry_index[key] = []
-                    geometry_index[key].append(feature_index)
-
-func _load_elevation(location_id: String) -> void:
-    var file := FileAccess.open("res://data/" + location_id + "_elevation_pilot.json", FileAccess.READ)
-    if file == null:
-        return
-    var data: Variant = JSON.parse_string(file.get_as_text())
-    if typeof(data) != TYPE_DICTIONARY or str(data.get("location_id", "")) != location_id:
-        return
-    if str(data.get("dataset", "")) != "srtm30m":
-        return
-    var width := int(data.get("width", 0))
-    var height := int(data.get("height", 0))
-    var elevations: Array = data.get("elevations_m", [])
-    var bbox: Array = data.get("bbox_lonlat", [])
-    if width < 2 or height < 2 or elevations.size() != width * height or bbox.size() != 4:
-        return
-    var origin_lon := float(manifest.get("origin_lon", 0))
-    var origin_lat := float(manifest.get("origin_lat", 0))
-    var grid: Array = []
-    var lowest := INF
-    var highest := -INF
-    for y in range(height):
-        for x in range(width):
-            var lon := lerpf(float(bbox[0]), float(bbox[2]), float(x) / float(width - 1))
-            var lat := lerpf(float(bbox[1]), float(bbox[3]), float(y) / float(height - 1))
-            var east := 6378137.0 * deg_to_rad(lon - origin_lon) * cos(deg_to_rad(origin_lat))
-            var south := -6378137.0 * deg_to_rad(lat - origin_lat)
-            grid.append({"tile": to_tile([east, south]), "height": float(elevations[y * width + x])})
-            lowest = minf(lowest, float(elevations[y * width + x]))
-            highest = maxf(highest, float(elevations[y * width + x]))
-    terrain_range = Vector2(lowest, highest)
-    for level in range(int(ceil(lowest / 10.0)) * 10, int(floor(highest / 10.0)) * 10 + 1, 10):
-        for y in range(height - 1):
-            for x in range(width - 1):
-                var a: Dictionary = grid[y * width + x]
-                var b: Dictionary = grid[y * width + x + 1]
-                var c: Dictionary = grid[(y + 1) * width + x + 1]
-                var d: Dictionary = grid[(y + 1) * width + x]
-                var crossings: Array[Vector2] = []
-                for edge in [[a, b], [b, c], [c, d], [d, a]]:
-                    var h0 := float(edge[0]["height"])
-                    var h1 := float(edge[1]["height"])
-                    if (h0 < level and h1 >= level) or (h1 < level and h0 >= level):
-                        var t := (float(level) - h0) / (h1 - h0)
-                        crossings.append((edge[0]["tile"] as Vector2).lerp(edge[1]["tile"], t))
-                if crossings.size() == 2:
-                    terrain_segments.append([crossings[0], crossings[1]])
-                elif crossings.size() == 4:
-                    terrain_segments.append([crossings[0], crossings[1]])
-                    terrain_segments.append([crossings[2], crossings[3]])
-
-func tile_extent() -> Rect2:
-    if settlement_boundary.has("bbox_lonlat"):
-        var bounds: Array = settlement_boundary["bbox_lonlat"]
-        if bounds.size() == 4:
-            var a := lonlat_to_tile(float(bounds[0]), float(bounds[1]))
-            var b := lonlat_to_tile(float(bounds[2]), float(bounds[3]))
-            return Rect2(a.min(b), (b - a).abs())
-    var metres: Array = manifest.get("bounds_m", [])
-    if metres.size() != 4:
-        return Rect2(origin_tile - Vector2(12, 12), Vector2(24, 24))
-    var a := to_tile([float(metres[0]), float(metres[1])])
-    var b := to_tile([float(metres[2]), float(metres[3])])
-    return Rect2(a.min(b), (b - a).abs())
-
-func lonlat_to_tile(lon: float, lat: float) -> Vector2:
-    var origin_lon := float(manifest.get("origin_lon", 0.0))
-    var origin_lat := float(manifest.get("origin_lat", 0.0))
-    var east := 6378137.0 * deg_to_rad(lon - origin_lon) * cos(deg_to_rad(origin_lat))
-    var south := -6378137.0 * deg_to_rad(lat - origin_lat)
-    return to_tile([east, south])
-
-func _load_boundary(location_id: String) -> void:
-    var file := FileAccess.open("res://data/" + location_id + "_boundary.json", FileAccess.READ)
-    if file == null:
-        return
-    var data: Variant = JSON.parse_string(file.get_as_text())
-    if typeof(data) != TYPE_DICTIONARY or str(data.get("location_id", "")) != location_id:
-        return
-    if str(data.get("geometry", {}).get("type", "")) != "MultiPolygon":
-        return
-    settlement_boundary = data
-    for polygon in data["geometry"]["coordinates"]:
-        for ring in polygon:
-            var points := PackedVector2Array()
-            for coordinate in ring:
-                points.append(lonlat_to_tile(float(coordinate[0]), float(coordinate[1])))
+        var anchor: Vector2i = settlements[id]["anchor"]
+        var features: Array = []
+        for ring in boundary.get("rings_m", []):
+            var points := to_relative(ring, anchor)
             if points.size() >= 3:
-                boundary_rings.append(points)
+                settlements[id]["rings"].append(points)
+                features.append({"kind": "boundary", "geom": "line", "pts": points})
+        settlements[id]["boundary_source_url"] = str(boundary.get("source_url", ""))
+        _static_node(anchor, features, "Boundary_" + id)
 
-func update_visible_chunks(bounds: Array[int]) -> void:
-    if not spatial_paths.is_empty():
-        _refresh_spatial_chunks(bounds)
+func _load_elevation() -> void:
+    var data: Variant = _read_json(ATLAS_DIR + "elevation.json")
+    if typeof(data) != TYPE_DICTIONARY or str(data.get("crs", "")) != WorldGrid.CRS:
         return
-    active_chunk_ids.clear()
-    var left := floori(float(bounds[0]) / GEOGRAPHY_CHUNK_TILES) - 1
-    var top := floori(float(bounds[1]) / GEOGRAPHY_CHUNK_TILES) - 1
-    var right := floori(float(bounds[2] - 1) / GEOGRAPHY_CHUNK_TILES) + 1
-    var bottom := floori(float(bounds[3] - 1) / GEOGRAPHY_CHUNK_TILES) + 1
-    var center := Vector2((left + right) * 0.5, (top + bottom) * 0.5)
-    var candidates: Array[Vector2i] = []
-    for cy in range(top, bottom + 1):
-        for cx in range(left, right + 1):
-            var key := Vector2i(cx, cy)
-            if geometry_index.has(key):
-                candidates.append(key)
-    candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-        return Vector2(a).distance_squared_to(center) < Vector2(b).distance_squared_to(center))
-    for i in range(mini(candidates.size(), MAX_ACTIVE_CHUNKS)):
-        active_chunk_ids.append(candidates[i])
+    for grid in data.get("grids", []):
+        var id := str(grid.get("location_id", ""))
+        var width := int(grid.get("width", 0))
+        var height := int(grid.get("height", 0))
+        var samples: Array = grid.get("samples_m", [])
+        if not settlements.has(id) or str(grid.get("dataset", "")) != "srtm30m":
+            continue
+        if width < 2 or height < 2 or samples.size() != width * height:
+            continue
+        var anchor: Vector2i = settlements[id]["anchor"]
+        var cells: Array = []
+        var lowest := INF
+        var highest := -INF
+        for sample in samples:
+            var relative := to_relative([sample], anchor)
+            cells.append({"tile": relative[0], "height": float(sample[2])})
+            lowest = minf(lowest, float(sample[2]))
+            highest = maxf(highest, float(sample[2]))
+        terrain_range[id] = Vector2(lowest, highest)
+        var features: Array = []
+        # 10 m contour lines interpolated from the sampled SRTM grid (unchanged method).
+        for level in range(int(ceil(lowest / 10.0)) * 10, int(floor(highest / 10.0)) * 10 + 1, 10):
+            for y in range(height - 1):
+                for x in range(width - 1):
+                    var a: Dictionary = cells[y * width + x]
+                    var b: Dictionary = cells[y * width + x + 1]
+                    var c: Dictionary = cells[(y + 1) * width + x + 1]
+                    var d: Dictionary = cells[(y + 1) * width + x]
+                    var crossings: Array[Vector2] = []
+                    for edge in [[a, b], [b, c], [c, d], [d, a]]:
+                        var h0 := float(edge[0]["height"])
+                        var h1 := float(edge[1]["height"])
+                        if (h0 < level and h1 >= level) or (h1 < level and h0 >= level):
+                            crossings.append((edge[0]["tile"] as Vector2).lerp(edge[1]["tile"], (float(level) - h0) / (h1 - h0)))
+                    if crossings.size() == 2 or crossings.size() == 4:
+                        features.append({"kind": "contour", "geom": "line", "pts": PackedVector2Array([crossings[0], crossings[1]])})
+                    if crossings.size() == 4:
+                        features.append({"kind": "contour", "geom": "line", "pts": PackedVector2Array([crossings[2], crossings[3]])})
+        _static_node(anchor, features, "Contours_" + id)
 
-func _refresh_spatial_chunks(bounds: Array[int]) -> void:
-    # Chunk keys are local projected metres; rendering uses one shared 6 m/tile scale.
-    var step := 256.0 / metres_per_tile
-    var left := floori((float(bounds[0]) - origin_tile.x) / step) - 1
-    var top := floori((float(bounds[1]) - origin_tile.y) / step) - 1
-    var right := floori((float(bounds[2]) - origin_tile.x) / step) + 1
-    var bottom := floori((float(bounds[3]) - origin_tile.y) / step) + 1
-    var center := Vector2((left + right) * 0.5, (top + bottom) * 0.5)
+func _load_coverage() -> void:
+    # Outline of every imported source extract: outside it the map is simply not imported yet.
+    for source in manifest.get("sources", []):
+        var id := str(source.get("location_id", ""))
+        if not settlements.has(id):
+            continue
+        var anchor: Vector2i = settlements[id]["anchor"]
+        var points := to_relative(source.get("coverage_ring_m", []), anchor)
+        if points.size() >= 4:
+            _static_node(anchor, [{"kind": "coverage", "geom": "line", "pts": points}], "Coverage_" + str(source.get("id", "")))
+
+func _load_large() -> void:
+    var data: Variant = _read_json(ATLAS_DIR + "large.json")
+    if typeof(data) != TYPE_DICTIONARY or str(data.get("schema", "")) != CHUNK_SCHEMA:
+        return
+    var groups: Dictionary = {}
+    for raw in data.get("features", []):
+        var points: Array = raw.get("points", [])
+        if points.is_empty():
+            continue
+        var home := WorldGrid.metres_to_cell(float(points[0][0]), float(points[0][1]))
+        var chunk := WorldGrid.cell_to_chunk(home.x, home.y)
+        if not groups.has(chunk):
+            groups[chunk] = []
+        groups[chunk].append(raw)
+    for chunk in groups:
+        var anchor := WorldGrid.chunk_origin_cell(chunk)
+        var features: Array = []
+        for raw in groups[chunk]:
+            var feature := _prepare(raw, anchor, Vector2i(2147483647, 0))
+            if not feature.is_empty():
+                features.append(feature)
+        _static_node(anchor, features, "Large_%d_%d" % [chunk.x, chunk.y])
+
+func _prepare(raw: Dictionary, anchor: Vector2i, owner: Vector2i) -> Dictionary:
+    var uid := str(raw.get("uid", ""))
+    var points := to_relative(raw.get("points", []), anchor)
+    if uid.is_empty() or points.size() < 2:
+        stats["rejected"] += 1
+        return {}
+    if uid_owner.has(uid):
+        stats["duplicates"] += 1
+        return {}
+    uid_owner[uid] = owner
+    var minimum := points[0]
+    var maximum := points[0]
+    for point in points:
+        minimum = minimum.min(point)
+        maximum = maximum.max(point)
+    var feature := {"uid": uid, "osm_id": str(raw.get("osm_id", "")), "kind": str(raw.get("kind", "")),
+        "subtype": str(raw.get("subtype", "")), "geom": str(raw.get("geom", "line")),
+        "pts": points, "min": minimum, "max": maximum, "fill_ok": false}
+    if feature["geom"] == "polygon" and points.size() >= 4:
+        var ring := points.duplicate()
+        ring.resize(ring.size() - 1)
+        if not Geometry2D.triangulate_polygon(ring).is_empty():
+            feature["fill"] = ring
+            feature["fill_ok"] = true
+    return feature
+
+## Chunks that must be present for the current camera: on-screen chunks plus a ring.
+func desired_chunks(world: Node2D) -> Array[Vector2i]:
     var desired: Array[Vector2i] = []
-    for cy in range(top, bottom + 1):
-        for cx in range(left, right + 1):
+    if not ready or world.lod() > STREAMING_MAX_LOD:
+        return desired
+    var bounds: Array[int] = world.visible_cell_bounds()
+    var first := WorldGrid.cell_to_chunk(bounds[0], bounds[1])
+    var last := WorldGrid.cell_to_chunk(bounds[2] - 1, bounds[3] - 1)
+    var screen := Rect2(Vector2.ZERO, world.get_viewport_rect().size)
+    var reach: float = float(WorldGrid.CHUNK_CELLS) * 64.0 * world.zoom_level * float(LOAD_RING_CHUNKS + 1)
+    screen = screen.grow(reach)
+    var center: Vector2i = world.camera_center_cell()
+    var center_chunk := Vector2(float(center.x) / WorldGrid.CHUNK_CELLS, float(center.y) / WorldGrid.CHUNK_CELLS)
+    if (last.x - first.x + 3) * (last.y - first.y + 3) > 4096:
+        return desired
+    for cy in range(first.y - LOAD_RING_CHUNKS, last.y + LOAD_RING_CHUNKS + 1):
+        for cx in range(first.x - LOAD_RING_CHUNKS, last.x + LOAD_RING_CHUNKS + 1):
             var key := Vector2i(cx, cy)
-            if spatial_paths.has(key):
+            if not chunk_index.has(key):
+                continue
+            var middle := WorldGrid.chunk_origin_cell(key) + Vector2i(WorldGrid.CHUNK_CELLS / 2, WorldGrid.CHUNK_CELLS / 2)
+            if screen.has_point(world.project_cell(middle)):
                 desired.append(key)
     desired.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-        return Vector2(a).distance_squared_to(center) < Vector2(b).distance_squared_to(center))
+        return (Vector2(a) + Vector2(0.5, 0.5)).distance_squared_to(center_chunk) < (Vector2(b) + Vector2(0.5, 0.5)).distance_squared_to(center_chunk))
     if desired.size() > MAX_ACTIVE_CHUNKS:
         desired.resize(MAX_ACTIVE_CHUNKS)
-    if desired == requested_chunks:
-        return
-    requested_chunks = desired
-    pending_chunks.clear()
-    for key in spatial_loaded.keys():
-        if not desired.has(key):
-            spatial_loaded.erase(key)
-    for key in desired:
-        if not spatial_loaded.has(key):
-            pending_chunks.append(key)
-    active_chunk_ids.clear()
-    for key in desired:
-        if spatial_loaded.has(key):
-            active_chunk_ids.append(key)
-    _rebuild_loaded_spatial_geometry()
+    return desired
 
-func process_pending_chunks() -> bool:
-    # Bounded cooperative streaming: at most two JSON chunks per game frame.
-    # This avoids synchronous mass loading inside _draw, but FileAccess reads
-    # are still on the main thread. Background worker I/O is future work.
+## Schedule loads and release far chunks. Cheap when the wanted set did not change.
+func update_view(world: Node2D) -> void:
+    if not ready:
+        return
+    var desired := desired_chunks(world)
+    if desired != requested_chunks:
+        requested_chunks = desired
+        for key in loaded.keys():
+            if not desired.has(key):
+                _evict(key)
+        pending_chunks.clear()
+        for key in desired:
+            if not loaded.has(key):
+                pending_chunks.append(key)
+        _refresh_active()
+    apply_camera(world)
+
+func _evict(key: Vector2i) -> void:
+    var node: Node2D = loaded[key]
+    for feature in node.features:
+        uid_owner.erase(feature["uid"])
+    loaded.erase(key)
+    layer.remove_child(node)
+    node.queue_free()
+    stats["evictions"] += 1
+
+func _refresh_active() -> void:
+    active_chunk_ids.clear()
+    for key in requested_chunks:
+        if loaded.has(key):
+            active_chunk_ids.append(key)
+
+## Bounded cooperative streaming: at most CHUNKS_PER_FRAME small JSON files per frame.
+func process_pending_chunks(world: Node2D) -> bool:
     if pending_chunks.is_empty():
         return false
     var loaded_any := false
     for i in range(mini(CHUNKS_PER_FRAME, pending_chunks.size())):
         var key: Vector2i = pending_chunks.pop_front()
-        if not requested_chunks.has(key) or not spatial_paths.has(key):
+        if not requested_chunks.has(key) or loaded.has(key):
             continue
-        var file := FileAccess.open(spatial_paths[key], FileAccess.READ)
-        if file == null:
-            push_warning("Missing geography chunk: " + str(key))
-            continue
-        var chunk: Variant = JSON.parse_string(file.get_as_text())
-        if typeof(chunk) == TYPE_DICTIONARY:
-            spatial_loaded[key] = chunk.get("features", [])
-            active_chunk_ids.append(key)
+        if _load_chunk(key):
             loaded_any = true
     if loaded_any:
-        _rebuild_loaded_spatial_geometry()
+        _refresh_active()
+        apply_camera(world)
     return loaded_any
 
-func _rebuild_loaded_spatial_geometry() -> void:
-    features.clear()
-    var unique: Dictionary = {}
-    for key in requested_chunks:
-        for feature in spatial_loaded.get(key, []):
-            var id := int(feature.get("id", -1))
-            if not unique.has(id):
-                unique[id] = true
-                features.append(feature)
-    _rebuild_geometry()
+func _load_chunk(key: Vector2i) -> bool:
+    var path := str(manifest.get("chunk_path_template", "")).replace("{x}", str(key.x)).replace("{y}", str(key.y))
+    var data: Variant = _read_json(path)
+    if typeof(data) != TYPE_DICTIONARY or str(data.get("schema", "")) != CHUNK_SCHEMA \
+            or str(data.get("crs", "")) != WorldGrid.CRS or str(data.get("grid_version", "")) != WorldGrid.GRID_VERSION:
+        push_warning("Geography chunk missing or incompatible: " + str(key))
+        return false
+    var declared: Array = data.get("chunk", [])
+    if declared.size() != 2 or Vector2i(int(declared[0]), int(declared[1])) != key:
+        push_warning("Geography chunk has another address: " + str(key))
+        return false
+    var node: Node2D = ChunkNode.new()
+    node.name = "Chunk_%d_%d" % [key.x, key.y]
+    node.anchor_cell = WorldGrid.chunk_origin_cell(key)
+    for raw in data.get("features", []):
+        var feature := _prepare(raw, node.anchor_cell, key)
+        if not feature.is_empty():
+            node.features.append(feature)
+    loaded[key] = node
+    layer.add_child(node)
+    stats["loads"] += 1
+    return true
 
-func to_tile(point_m: Array) -> Vector2:
-    return origin_tile + Vector2(float(point_m[0]), float(point_m[1])) / metres_per_tile
-
-func render(world: Node2D, visible_bounds: Array[int]) -> void:
+## Position every geography node for the current camera (no geometry is rebuilt).
+func apply_camera(world: Node2D) -> void:
     if not ready:
         return
-    for segment in terrain_segments:
-        var a: Vector2 = segment[0]
-        var b: Vector2 = segment[1]
-        if maxf(a.x, b.x) < visible_bounds[0] or minf(a.x, b.x) > visible_bounds[2] or maxf(a.y, b.y) < visible_bounds[1] or minf(a.y, b.y) > visible_bounds[3]:
-            continue
-        world.draw_line(world.project_point(a.x, a.y), world.project_point(b.x, b.y), Color("#91ae86", 0.48), 1.2, true)
-    for ring in boundary_rings:
-        for j in range(ring.size() - 1):
-            var a: Vector2 = ring[j]
-            var b: Vector2 = ring[j + 1]
-            if maxf(a.x, b.x) < visible_bounds[0] or minf(a.x, b.x) > visible_bounds[2] or maxf(a.y, b.y) < visible_bounds[1] or minf(a.y, b.y) > visible_bounds[3]:
-                continue
-            world.draw_line(world.project_point(a.x, a.y), world.project_point(b.x, b.y), Color("#e2bf72", 0.9), 2.0, true)
+    var basis_x: Vector2 = Vector2(world.TILE_W * 0.5, world.TILE_H * 0.5) * world.zoom_level
+    var basis_y: Vector2 = Vector2(-world.TILE_W * 0.5, world.TILE_H * 0.5) * world.zoom_level
+    var band: float = world.zoom_band()
+    var level: int = world.lod()
+    for node in static_nodes + loaded.values():
+        node.transform = Transform2D(basis_x, basis_y, world.project_cell(node.anchor_cell))
+        node.configure(band, level)
+
+func loaded_feature_count() -> int:
+    var total := 0
+    for node in loaded.values():
+        total += node.features.size()
+    return total
+
+## Settlement whose sourced boundary contains the cell, or "" outside all of them.
+func settlement_at(cell: Vector2i) -> String:
+    for id in settlement_order:
+        var anchor: Vector2i = settlements[id]["anchor"]
+        var point := Vector2(cell - anchor)
+        for ring in settlements[id]["rings"]:
+            if Geometry2D.is_point_in_polygon(point, ring):
+                return id
+    return ""
+
+func nearest_settlement(cell: Vector2i) -> String:
+    var best := ""
+    var best_distance := INF
+    for id in settlement_order:
+        var distance := Vector2(cell - (settlements[id]["focus_cell"] as Vector2i)).length()
+        if distance < best_distance:
+            best_distance = distance
+            best = id
+    return best
+
+## Screen-space sprites for sourced buildings and forests (upright, never skewed).
+func render_sprites(world: Node2D, canvas: CanvasItem) -> void:
+    if not ready or world.lod() > 0:
+        return
+    var bounds: Array[int] = world.visible_cell_bounds()
     var drawn_buildings := 0
     var drawn_trees := 0
-    update_visible_chunks(visible_bounds)
-    var visible_features: Dictionary = {}
-    if not spatial_paths.is_empty():
-        for feature_index in range(cached_geometry.size()):
-            visible_features[feature_index] = true
-    else:
-        for key in active_chunk_ids:
-            for feature_index in geometry_index[key]:
-                visible_features[feature_index] = true
-    for feature_index in visible_features:
-        var item: Dictionary = cached_geometry[feature_index]
-        var kind: String = item["kind"]
-        var min_tile: Vector2 = item["minimum"]
-        var max_tile: Vector2 = item["maximum"]
-        if max_tile.x < visible_bounds[0] or max_tile.y < visible_bounds[1] or min_tile.x > visible_bounds[2] or min_tile.y > visible_bounds[3]:
-            continue
-        var points := PackedVector2Array()
-        for tile in item["tiles"]:
-            points.append(world.project_point(tile.x, tile.y))
-        match kind:
-            "road":
-                world.draw_polyline(points, Color("#263e46", 0.95), maxf(3.0, 8.0 * world.zoom_level), true)
-                world.draw_polyline(points, Color("#9ca6a3", 0.95), maxf(2.0, 5.0 * world.zoom_level), true)
-            "building":
-                world.draw_polyline(points, Color("#b6c6cb", 0.65), 1.0, true)
-                if drawn_buildings < MAX_BUILDING_SPRITES and world.zoom_level >= 0.85:
-                    var center := (min_tile + max_tile) * 0.5
-                    var anchor: Vector2 = world.project_point(center.x, center.y)
-                    var footprint := maxf(max_tile.x - min_tile.x, max_tile.y - min_tile.y)
-                    var sprite_width: float = clampf(footprint * 9.0 * world.zoom_level, 22.0, 68.0)
-                    var sprite_index := posmod(int(absf(center.x * 17.0 + center.y * 31.0)), BUILDING_SPRITES.size())
-                    var texture: Texture2D = BUILDING_SPRITES[sprite_index]
-                    var sprite_height: float = sprite_width * float(texture.get_height()) / float(texture.get_width())
-                    world.draw_texture_rect(texture, Rect2(anchor.x - sprite_width * 0.5, anchor.y - sprite_height * 0.8, sprite_width, sprite_height), false, Color(1, 1, 1, 0.12) if world.fade_occluding_buildings else Color.WHITE)
-                    drawn_buildings += 1
-            "water":
-                if points.size() >= 3 and points[0].distance_to(points[points.size() - 1]) < 1.0:
-                    _draw_safe_polygon(world, points, Color("#327fa8", 0.65))
-                world.draw_polyline(points, Color("#4a9cc7", 0.9), 2.0, true)
-            "forest":
-                if points.size() >= 3 and points[0].distance_to(points[points.size() - 1]) < 1.0:
-                    _draw_safe_polygon(world, points, Color("#36734c", 0.3))
-                world.draw_polyline(points, Color("#4b9164", 0.8), 2.0, true)
-                if world.zoom_level >= 0.85 and drawn_trees < 60:
-                    var forest_tiles: PackedVector2Array = item["tiles"]
-                    for gx in range(int(ceil(min_tile.x / 8.0)), int(floor(max_tile.x / 8.0)) + 1):
-                        for gy in range(int(ceil(min_tile.y / 8.0)), int(floor(max_tile.y / 8.0)) + 1):
-                            if drawn_trees >= 60:
-                                break
-                            var tree_tile := Vector2(float(gx) * 8.0, float(gy) * 8.0)
-                            if not Geometry2D.is_point_in_polygon(tree_tile, forest_tiles):
-                                continue
-                            var anchor: Vector2 = world.project_point(tree_tile.x, tree_tile.y)
-                            var sprite_width: float = 28.0 * world.zoom_level
-                            world.draw_texture_rect(TREE_SPRITE, Rect2(anchor.x - sprite_width * 0.5, anchor.y - sprite_width, sprite_width, sprite_width), false)
+    var nodes: Array = static_nodes.duplicate()
+    for key in active_chunk_ids:
+        nodes.append(loaded[key])
+    for node in nodes:
+        var anchor: Vector2i = node.anchor_cell
+        var low := Vector2(float(bounds[0] - anchor.x), float(bounds[1] - anchor.y))
+        var high := Vector2(float(bounds[2] - anchor.x), float(bounds[3] - anchor.y))
+        for feature in node.features:
+            var kind := str(feature["kind"])
+            if kind != "building" and kind != "forest":
+                continue
+            var minimum: Vector2 = feature["min"]
+            var maximum: Vector2 = feature["max"]
+            if maximum.x < low.x or maximum.y < low.y or minimum.x > high.x or minimum.y > high.y:
+                continue
+            if kind == "building" and drawn_buildings < MAX_BUILDING_SPRITES:
+                var center := (minimum + maximum) * 0.5
+                var where: Vector2 = world.project_cell(anchor, center)
+                var footprint := maxf(maximum.x - minimum.x, maximum.y - minimum.y)
+                var sprite_width: float = clampf(footprint * 9.0 * world.zoom_level, 22.0, 68.0)
+                var seed_x := float(anchor.x) + center.x
+                var seed_y := float(anchor.y) + center.y
+                var texture: Texture2D = BUILDING_SPRITES[posmod(int(absf(seed_x * 17.0 + seed_y * 31.0)), BUILDING_SPRITES.size())]
+                var sprite_height: float = sprite_width * float(texture.get_height()) / float(texture.get_width())
+                canvas.draw_texture_rect(texture, Rect2(where.x - sprite_width * 0.5, where.y - sprite_height * 0.8, sprite_width, sprite_height), false,
+                    Color(1, 1, 1, 0.12) if world.fade_occluding_buildings else Color.WHITE)
+                drawn_buildings += 1
+            elif kind == "forest" and feature.get("fill_ok", false) and drawn_trees < MAX_TREE_SPRITES:
+                # Trees stand on a fixed 8-cell lattice of the world grid, inside the real polygon.
+                var from_x := maxi(bounds[0], anchor.x + int(floor(minimum.x)))
+                var to_x := mini(bounds[2], anchor.x + int(ceil(maximum.x)))
+                var from_y := maxi(bounds[1], anchor.y + int(floor(minimum.y)))
+                var to_y := mini(bounds[3], anchor.y + int(ceil(maximum.y)))
+                var gx := WorldGrid.floor_div(from_x + 7, 8) * 8
+                while gx <= to_x and drawn_trees < MAX_TREE_SPRITES:
+                    var gy := WorldGrid.floor_div(from_y + 7, 8) * 8
+                    while gy <= to_y and drawn_trees < MAX_TREE_SPRITES:
+                        var local := Vector2(float(gx - anchor.x), float(gy - anchor.y))
+                        if Geometry2D.is_point_in_polygon(local, feature["fill"]):
+                            var tree_at: Vector2 = world.project_cell(Vector2i(gx, gy))
+                            var tree_width: float = 28.0 * world.zoom_level
+                            canvas.draw_texture_rect(TREE_SPRITE, Rect2(tree_at.x - tree_width * 0.5, tree_at.y - tree_width, tree_width, tree_width), false)
                             drawn_trees += 1
-            "farmland":
-                if points.size() >= 3 and points[0].distance_to(points[points.size() - 1]) < 1.0:
-                    _draw_safe_polygon(world, points, Color("#a3ad63", 0.24))
-                world.draw_polyline(points, Color("#a3ad63", 0.8), 2.0, true)
-
-func _draw_safe_polygon(world: Node2D, points: PackedVector2Array, color: Color) -> void:
-    # OSM boundaries can self-intersect or repeat vertices. Never send invalid
-    # polygons to the canvas renderer (which logs triangulation errors).
-    var ring := points.duplicate()
-    if ring.size() > 2 and ring[0].distance_to(ring[ring.size() - 1]) < 1.0:
-        ring.resize(ring.size() - 1)
-    if ring.size() < 3 or Geometry2D.triangulate_polygon(ring).is_empty():
-        return
-    world.draw_colored_polygon(ring, color)
+                        gy += 8
+                    gx += 8

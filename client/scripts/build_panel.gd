@@ -32,7 +32,7 @@ func _ready() -> void:
     layout.add_child(build)
     var reload := Button.new()
     reload.text = "Обновить кварталы"
-    reload.pressed.connect(func(): api.load_sector())
+    reload.pressed.connect(func(): world.refresh_parcels())
     layout.add_child(reload)
     message = Label.new()
     message.text = "Выберите свободный участок на карте"
@@ -79,6 +79,6 @@ func _on_result(_result: int, status: int, _headers: PackedStringArray, body: Pa
     if status == 201:
         var result: Variant = JSON.parse_string(body.get_string_from_utf8())
         message.text = "Построено! Новых участков: " + str(result.get("new_plots", 0))
-        api.load_sector()
+        world.refresh_parcels()
     else:
         message.text = "Ошибка строительства: HTTP " + str(status)
