@@ -29,7 +29,30 @@ func _ready() -> void:
     hud.add_theme_font_size_override("font_size", 19)
     add_child(hud)
     _update_hud()
+    $API.sector_loaded.connect(_on_sector_loaded)
+    $API.request_failed.connect(_on_api_error)
     queue_redraw()
+
+func connect_to_server(url: String, token: String) -> void:
+    $API.configure(url, token)
+    $API.load_sector()
+
+func _on_sector_loaded(data: Dictionary) -> void:
+    var received: Array = data["plots"]
+    var verified: Array[Dictionary] = []
+    for item in received:
+        if typeof(item) != TYPE_DICTIONARY:
+            return
+        if not item.has("tile_x") or not item.has("tile_y") or not item.has("zone") or not item.has("width_tiles") or not item.has("height_tiles"):
+            return
+        verified.append(item)
+    plots = verified
+    selected_plot = -1
+    _update_hud()
+    queue_redraw()
+
+func _on_api_error(_status: int, message: String) -> void:
+    hud.text = "BASHECO | " + message
 
 func iso(x: float, y: float) -> Vector2:
     return Vector2((x - y) * TILE_W * 0.5, (x + y) * TILE_H * 0.5)
