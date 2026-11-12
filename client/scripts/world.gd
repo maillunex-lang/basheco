@@ -53,6 +53,8 @@ var world_visible := false:
 var dragging := false
 var touches: Dictionary = {}
 var pinch_distance := 0.0
+var touch_start: Dictionary = {}
+var touch_moved: Dictionary = {}
 var selected_plot := -1
 var fade_occluding_buildings := false
 var occlusion_button: Button
@@ -458,7 +460,13 @@ func draw_overlay(canvas: CanvasItem) -> void:
 
 # --- Input ---------------------------------------------------------------------
 
-func _unhandled_input(event: InputEvent) -> void:
+# Handle world gestures before transparent CanvasLayer HUD controls can
+# consume the event. Reject touches over actual interactive UI bands.
+func _map_gesture_allowed(point: Vector2) -> bool:
+    var size := get_viewport_rect().size
+    return point.y > 64.0 and point.y < size.y - 82.0
+
+func _input(event: InputEvent) -> void:
     if not world_visible or get_node("Login").panel.visible:
         return
     if event is InputEventMouseButton:
@@ -475,11 +483,17 @@ func _unhandled_input(event: InputEvent) -> void:
         _camera_changed()
     elif event is InputEventScreenTouch:
         if event.pressed:
+            if touches.is_empty() and not _map_gesture_allowed(event.position):
+                return
             touches[event.index] = event.position
+            touch_start[event.index] = event.position
+            touch_moved[event.index] = false
         else:
-            var was_tap := touches.size() == 1 and touches.has(event.index)
-            var start: Vector2 = touches.get(event.index, event.position)
+            var was_tap: bool = touches.size() == 1 and touches.has(event.index) and not touch_moved.get(event.index, false)
+            var start: Vector2 = touch_start.get(event.index, event.position)
             touches.erase(event.index)
+            touch_start.erase(event.index)
+            touch_moved.erase(event.index)
             if was_tap and start.distance_to(event.position) < 18.0:
                 _select_at(event.position)
         if touches.size() == 2:
@@ -488,7 +502,11 @@ func _unhandled_input(event: InputEvent) -> void:
         else:
             pinch_distance = 0.0
     elif event is InputEventScreenDrag:
+        if not touches.has(event.index):
+            return
         var previous: Vector2 = touches.get(event.index, event.position)
+        if (event.position as Vector2).distance_to(touch_start.get(event.index, event.position)) > 12.0:
+            touch_moved[event.index] = true
         touches[event.index] = event.position
         if touches.size() == 1:
             camera_offset += event.position - previous

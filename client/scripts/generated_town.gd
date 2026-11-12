@@ -50,28 +50,33 @@ static func draw_town(canvas: CanvasItem, world: Node2D, view: Array[int], plots
     var objects: Array[Dictionary] = []
     for by in range(0, SIZE - ROAD_STEP, ROAD_STEP):
         for bx in range(0, SIZE - ROAD_STEP, ROAD_STEP):
-            var seed := posmod((bx + 3) * 37 + (by + 7) * 71 + focus.x * 3 + focus.y, 2147483647)
-            var footprint: Vector2i = FOOTPRINTS[posmod(seed, FOOTPRINTS.size())]
-            var x := anchor.x + bx + 2
-            var y := anchor.y + by + 2
-            if x + footprint.x > max_x or y + footprint.y > max_y or x < min_x - 4 or y < min_y - 4:
-                continue
-            if overlaps_plot(x, y, footprint.x, footprint.y, plots):
-                continue
-            var foot := Vector2i(x, y)
-            var where: Vector2 = world.project_cell(foot, Vector2(float(footprint.x) * 0.5, float(footprint.y) * 0.5))
-            var sprite: Texture2D = HOUSE_ART[posmod(seed / 5, HOUSE_ART.size())]
-            var size_px := clampf(float(maxi(footprint.x, footprint.y)) * 27.0 * world.zoom_level, 25.0, 112.0)
-            var height_px := size_px * float(sprite.get_height()) / float(sprite.get_width())
-            objects.append({"depth": where.y, "texture": sprite,
-                "rect": Rect2(where.x - size_px * 0.5, where.y - height_px * 0.85, size_px, height_px)})
-            if posmod(seed, 3) == 0:
-                var tree_cell := Vector2i(x + 4, y + 4)
-                if not road_at(tree_cell.x, tree_cell.y, anchor) and not overlaps_plot(tree_cell.x, tree_cell.y, 1, 1, plots):
-                    var tree_at: Vector2 = world.project_cell(tree_cell)
-                    var tree_px: float = 26.0 * world.zoom_level
-                    objects.append({"depth": tree_at.y, "texture": TREE_ART,
-                        "rect": Rect2(tree_at.x - tree_px * 0.5, tree_at.y - tree_px, tree_px, tree_px)})
+            var block_seed := posmod((bx + 3) * 37 + (by + 7) * 71 + focus.x * 3 + focus.y, 2147483647)
+            # Distinct neighborhoods: park, low-density housing, dense center.
+            var neighborhood := posmod(block_seed / 11, 9)
+            for slot in range(4):
+                var local_x := 1 + (slot % 2) * 3
+                var local_y := 1 + (slot / 2) * 3
+                var seed := posmod(block_seed + slot * 59, 2147483647)
+                var x := anchor.x + bx + local_x
+                var y := anchor.y + by + local_y
+                var footprint: Vector2i = FOOTPRINTS[posmod(seed, FOOTPRINTS.size())]
+                if neighborhood == 0:
+                    footprint = Vector2i(1, 1)
+                if x + footprint.x >= anchor.x + bx + ROAD_STEP or y + footprint.y >= anchor.y + by + ROAD_STEP:
+                    continue
+                if x + footprint.x > max_x or y + footprint.y > max_y or x < min_x - 4 or y < min_y - 4:
+                    continue
+                if overlaps_plot(x, y, footprint.x, footprint.y, plots):
+                    continue
+                var foot := Vector2i(x, y)
+                var where: Vector2 = world.project_cell(foot, Vector2(float(footprint.x) * 0.5, float(footprint.y) * 0.5))
+                var sprite: Texture2D = TREE_ART if neighborhood == 0 or posmod(seed, 7) == 0 else HOUSE_ART[posmod(seed / 5, HOUSE_ART.size())]
+                var size_px := clampf(float(maxi(footprint.x, footprint.y)) * 30.0 * world.zoom_level, 27.0, 130.0)
+                if sprite == TREE_ART:
+                    size_px = 28.0 * world.zoom_level
+                var height_px := size_px * float(sprite.get_height()) / float(sprite.get_width())
+                objects.append({"depth": where.y, "texture": sprite,
+                    "rect": Rect2(where.x - size_px * 0.5, where.y - height_px * 0.85, size_px, height_px)})
     objects.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
         return float(a["depth"]) < float(b["depth"]))
     for item in objects:

@@ -264,29 +264,29 @@ func _run() -> void:
     down.index = 0
     down.pressed = true
     down.position = Vector2(200, 300)
-    world._unhandled_input(down)
+    world._input(down)
     var drag := InputEventScreenDrag.new()
     drag.index = 0
     drag.position = Vector2(220, 320)
-    world._unhandled_input(drag)
+    world._input(drag)
     check(world.project_cell(ufa).distance_to(before_drag + Vector2(20, 20)) < 0.01, "one finger drags the map")
     var second := InputEventScreenTouch.new()
     second.index = 1
     second.pressed = true
     second.position = Vector2(420, 320)
-    world._unhandled_input(second)
+    world._input(second)
     var zoom_before: float = world.zoom_level
     var spread := InputEventScreenDrag.new()
     spread.index = 1
     spread.position = Vector2(520, 320)
-    world._unhandled_input(spread)
+    world._input(spread)
     check(world.zoom_level > zoom_before, "two fingers zoom")
     for index in [1, 0]:
         var up := InputEventScreenTouch.new()
         up.index = index
         up.position = Vector2(220, 320)
         up.pressed = false
-        world._unhandled_input(up)
+        world._input(up)
     check(world.touches.is_empty(), "touches released")
     await process_frame
     await process_frame

@@ -75,7 +75,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for test in generated_town iso_art iso_2d map_ab alpha_plot_ui alpha_ui_contract grid_parity smoke navigation stage13_pilot; do
+          for test in touch_map generated_town iso_art iso_2d map_ab alpha_plot_ui alpha_ui_contract grid_parity smoke navigation stage13_pilot; do
             godot --headless --path client -s "tests/$test.gd"
           done
 
