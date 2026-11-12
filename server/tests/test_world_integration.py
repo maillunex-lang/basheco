@@ -5,7 +5,7 @@ from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import HTTPException
 from basheco.db import connect
-from basheco.world import ConstructRequest, construct, sector_map
+from basheco.world import ConstructRequest, construct, sector_map, sector_viewport
 from basheco.migrate import main as migrate
 
 @unittest.skipUnless(os.environ.get("BASHECO_TEST_DATABASE_URL"), "Disposable test database required")
@@ -55,6 +55,17 @@ class WorldTests(unittest.TestCase):
         world=sector_map("ufa-prototype-01")
         self.assertEqual(world["sector"]["geometry_source"],"prototype")
         self.assertEqual(len(world["plots"]),6)
+
+    def test_viewport_only_intersecting_parcels(self):
+        visible = sector_viewport("ufa-prototype-01", 0, 0, 8, 8)
+        self.assertEqual(visible["viewport"]["max_x"], 8)
+        self.assertEqual(len(visible["plots"]), 1)
+        self.assertEqual(visible["plots"][0]["tile_x"], 2)
+        empty = sector_viewport("ufa-prototype-01", 300, 300, 310, 310)
+        self.assertEqual(empty["plots"], [])
+        with self.assertRaises(HTTPException) as ctx:
+            sector_viewport("ufa-prototype-01", 0, 0, 1000, 1000)
+        self.assertEqual(ctx.exception.status_code, 422)
 
     def test_building_and_double_claim(self):
         result=construct(self.req(),str(self.accounts[0]))
