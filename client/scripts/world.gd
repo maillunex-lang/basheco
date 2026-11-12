@@ -21,14 +21,9 @@ const ZONES := {
     "industrial": Color("#5f93a9"),
     "agricultural": Color("#72b883")
 }
-var plots: Array[Dictionary] = [
-    {"tile_x": 2, "tile_y": 2, "width_tiles": 5, "height_tiles": 5, "zone": "commercial"},
-    {"tile_x": 9, "tile_y": 2, "width_tiles": 5, "height_tiles": 5, "zone": "commercial"},
-    {"tile_x": 2, "tile_y": 10, "width_tiles": 6, "height_tiles": 6, "zone": "industrial"},
-    {"tile_x": 11, "tile_y": 10, "width_tiles": 6, "height_tiles": 6, "zone": "industrial"},
-    {"tile_x": 2, "tile_y": 20, "width_tiles": 6, "height_tiles": 6, "zone": "agricultural"},
-    {"tile_x": 11, "tile_y": 20, "width_tiles": 6, "height_tiles": 6, "zone": "agricultural"}
-]
+var plots: Array[Dictionary] = []
+var _last_viewport_bounds: Array[int] = []
+var _viewport_cooldown := 0.0
 var zoom_level := 1.15
 var camera_offset := Vector2.ZERO
 var camera_initialized := false
@@ -63,6 +58,10 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
     if world_visible and geo_background.process_pending_chunks():
         queue_redraw()
+    if world_visible:
+        _viewport_cooldown = maxf(0.0, _viewport_cooldown - _delta)
+        if _viewport_cooldown <= 0.0 and not $API.access_token.is_empty():
+            _request_camera_parcels()
 
 func _focus_on_district() -> void:
     var focus_tile: Vector2 = geo_background.origin_tile if current_location_id != "ufa" else Vector2(12.0, 12.0)
@@ -107,7 +106,8 @@ func _on_viewport_resized() -> void:
 
 func connect_to_server(url: String, token: String) -> void:
     $API.configure(url, token)
-    $API.load_sector()
+    _last_viewport_bounds.clear()
+    _request_camera_parcels()
 
 func _on_sector_loaded(data: Dictionary) -> void:
     var received: Array = data["plots"]
@@ -118,17 +118,13 @@ func _on_sector_loaded(data: Dictionary) -> void:
         if not item.has("tile_x") or not item.has("tile_y") or not item.has("zone") or not item.has("width_tiles") or not item.has("height_tiles"):
             return
         verified.append(item)
-    ufa_saved_plots = verified.duplicate(true)
     if current_location_id == "ufa":
-        plots = verified
+        ufa_saved_plots = verified.duplicate(true)
+    plots = verified
     world_visible = true
     var sector: Dictionary = data.get("sector", {})
-    ufa_saved_size = Vector2i(
-        maxi(INITIAL_GRID_SIZE, int(sector.get("width_tiles", INITIAL_GRID_SIZE))),
-        maxi(INITIAL_GRID_SIZE, int(sector.get("height_tiles", INITIAL_GRID_SIZE)))
-    )
-    if current_location_id == "ufa":
-        _apply_geography_extent()
+    ufa_saved_size = Vector2i(0, 0)
+    _apply_geography_extent()
     selected_plot = -1
     _update_hud()
     _camera_changed()
@@ -140,10 +136,9 @@ func open_location(location_id: String) -> bool:
     if not geo_background.ready:
         return false
     current_location_id = location_id
-    if location_id == "ufa":
-        plots = ufa_saved_plots.duplicate(true)
-    else:
-        plots.clear()
+    plots.clear()
+    _last_viewport_bounds.clear()
+    _viewport_cooldown = 0.0
     _apply_geography_extent()
     selected_plot = -1
     world_visible = true
@@ -154,14 +149,28 @@ func open_location(location_id: String) -> bool:
     queue_redraw()
     return true
 
+func _request_camera_parcels() -> void:
+    var visible: Array[int] = _visible_tile_bounds()
+    var cx := int((visible[0] + visible[2]) / 2)
+    var cy := int((visible[1] + visible[3]) / 2)
+    var bounds: Array[int] = [cx - 96, cy - 96, cx + 96, cy + 96]
+    if bounds == _last_viewport_bounds:
+        _viewport_cooldown = 1.0
+        return
+    if $API._http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
+        return
+    _last_viewport_bounds = bounds
+    _viewport_cooldown = 0.5
+    $API.load_viewport(current_location_id, bounds)
+
 func _apply_geography_extent() -> void:
     # Extent is measured from sourced geographic coverage; player plots can expand it.
     # The geographic extract is not a claim about the official settlement boundary.
     var extent: Rect2 = geo_background.tile_extent()
     world_min_x = mini(0, int(floor(extent.position.x)) - 12)
     world_min_y = mini(0, int(floor(extent.position.y)) - 12)
-    world_width = maxi(ufa_saved_size.x if current_location_id == "ufa" else 0, int(ceil(extent.end.x)) + 12)
-    world_height = maxi(ufa_saved_size.y if current_location_id == "ufa" else 0, int(ceil(extent.end.y)) + 12)
+    world_width = maxi(0, int(ceil(extent.end.x)) + 12)
+    world_height = maxi(0, int(ceil(extent.end.y)) + 12)
     for plot in plots:
         world_min_x = mini(world_min_x, int(plot["tile_x"]) - 12)
         world_min_y = mini(world_min_y, int(plot["tile_y"]) - 12)
