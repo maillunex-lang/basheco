@@ -4,8 +4,8 @@ const SOURCES := {
     "ufa": "res://data/ufa_projected_pilot.json",
     "mikhailovka": "res://data/mikhailovka_wide/manifest.json"
 }
-const METRES_PER_TILE := 4.0  # Visual pilot only; not a surveyed gameplay scale.
-const ORIGIN_TILE := Vector2(25.0, 25.0)
+var metres_per_tile := 4.0  # Visual pilot only; not a surveyed gameplay scale.
+var origin_tile := Vector2(25.0, 25.0)
 const MAX_FEATURES := 10000
 var features: Array = []
 var cached_geometry: Array = []
@@ -14,6 +14,8 @@ var ready := false
 
 func load_pilot(location_id: String = "ufa") -> void:
     ready = false
+    origin_tile = Vector2(150.0, 180.0) if location_id == "mikhailovka" else Vector2(25.0, 25.0)
+    metres_per_tile = 6.0 if location_id == "mikhailovka" else 4.0
     features.clear()
     cached_geometry.clear()
     manifest.clear()
@@ -66,7 +68,7 @@ func load_pilot(location_id: String = "ufa") -> void:
     ready = true
 
 func to_tile(point_m: Array) -> Vector2:
-    return ORIGIN_TILE + Vector2(float(point_m[0]), float(point_m[1])) / METRES_PER_TILE
+    return origin_tile + Vector2(float(point_m[0]), float(point_m[1])) / metres_per_tile
 
 func render(world: Node2D, visible_bounds: Array[int]) -> void:
     if not ready:
