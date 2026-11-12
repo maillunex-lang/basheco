@@ -351,7 +351,7 @@ func _draw() -> void:
     var corners := PackedVector2Array([project_cell(Vector2i(left, top)), project_cell(Vector2i(right, top)),
         project_cell(Vector2i(right, bottom)), project_cell(Vector2i(left, bottom))])
     draw_colored_polygon(corners, Color("#27414a"))
-    if lod() == 0 and (right - left) * (bottom - top) <= MAX_VISIBLE_TILES:
+    if lod() == 0 and get_node("Build").panel.visible and (right - left) * (bottom - top) <= MAX_VISIBLE_TILES:
         for x in range(left, right + 1):
             draw_line(project_cell(Vector2i(x, top)), project_cell(Vector2i(x, bottom)), Color("#142a32"), 1.0)
         for y in range(top, bottom + 1):
@@ -363,24 +363,9 @@ func draw_overlay(canvas: CanvasItem) -> void:
         return
     var view := visible_cell_bounds()
     geo_background.render_sprites(self, canvas)
-    # Stage 1.3 pilot: deterministic visual-only buildings and roads.
-    # This layer is NOT player property and is not written to the game database.
-    if lod() <= 1:
-        for obj in generated_objects:
-            var cell_data: Array = obj["cell"]
-            var size_data: Array = obj["size"]
-            var cell := Vector2i(int(cell_data[0]), int(cell_data[1]))
-            var footprint := Vector2i(int(size_data[0]), int(size_data[1]))
-            if cell.x + footprint.x < view[0] or cell.x > view[2] or cell.y + footprint.y < view[1] or cell.y > view[3]:
-                continue
-            var corners := PackedVector2Array([
-                project_cell(cell), project_cell(cell + Vector2i(footprint.x, 0)),
-                project_cell(cell + footprint), project_cell(cell + Vector2i(0, footprint.y))
-            ])
-            var color := Color("#53616b") if str(obj["kind"]) == "road" else Color("#d7a76e")
-            canvas.draw_colored_polygon(corners, color)
-            if str(obj["kind"]) == "house":
-                canvas.draw_polyline(PackedVector2Array([corners[0], corners[1], corners[2], corners[3], corners[0]]), Color("#fff0cb"), 2.0)
+    # Visual-only pilot roads/houses are deliberately not drawn: they did not
+    # respect the real OSM road network and overlapped existing buildings.
+    # Real geographical features remain rendered by geo_background.
     # Construction preview is only an outline of an existing server parcel.
     # It is NOT a building footprint, cadastral clearance or server approval.
     var build_panel = get_node("Build")
@@ -414,19 +399,22 @@ func draw_overlay(canvas: CanvasItem) -> void:
                 project_cell(cell + Vector2i(width, height)), project_cell(cell + Vector2i(0, height)),
                 project_cell(cell)
             ])
-            canvas.draw_colored_polygon(PackedVector2Array([outline[0], outline[1], outline[2], outline[3]]), color)
-            if lod() == 0:
+            if build_panel.panel.visible or i == selected_plot:
+                canvas.draw_colored_polygon(PackedVector2Array([outline[0], outline[1], outline[2], outline[3]]), Color(color, 0.34 if i != selected_plot else 0.66))
+            if lod() == 0 and build_panel.panel.visible:
                 for d in range(1, width):
                     canvas.draw_line(project_cell(cell + Vector2i(d, 0)), project_cell(cell + Vector2i(d, height)), Color("#142a32"), 1.0)
                 for d in range(1, height):
                     canvas.draw_line(project_cell(cell + Vector2i(0, d)), project_cell(cell + Vector2i(width, d)), Color("#142a32"), 1.0)
-            canvas.draw_polyline(outline, Color("#142a32"), 1.0)
+            if build_panel.panel.visible or i == selected_plot:
+                canvas.draw_polyline(outline, color.lightened(0.25), 2.0)
             var center := project_cell(cell, Vector2(float(width) / 2.0, float(height) / 2.0))
             var icon: Texture2D = ZONE_ICONS.get(str(p["zone"]))
-            if icon != null and lod() <= 1:
+            if icon != null and lod() <= 1 and (build_panel.panel.visible or i == selected_plot):
                 var icon_size := 44.0 * zoom_level
                 canvas.draw_texture_rect(icon, Rect2(center - Vector2(icon_size * 0.5, icon_size * 0.8), Vector2(icon_size, icon_size)), false)
-            canvas.draw_circle(center, 3.0, Color.WHITE)
+            if build_panel.panel.visible or i == selected_plot:
+                canvas.draw_circle(center, 3.0, Color.WHITE)
             if i == selected_plot and p.get("building_id") != null:
                 # Selected building: visible outline even when icon texture is small.
                 canvas.draw_polyline(outline, Color("#ffed83"), 3.5, true)

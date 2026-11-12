@@ -69,14 +69,15 @@ func _ready() -> void:
     geo_credit = Label.new()
     geo_credit.text = CREDIT + "покрытие частичное"
     geo_credit.add_theme_color_override("font_color", Color("#dbe6e2"))
-    geo_credit.add_theme_font_size_override("font_size", 13)
+    geo_credit.add_theme_font_size_override("font_size", 11)
     geo_credit.mouse_filter = Control.MOUSE_FILTER_IGNORE
     add_child(geo_credit)
     performance_label = Label.new()
     performance_label.add_theme_font_size_override("font_size", 12)
     performance_label.add_theme_color_override("font_color", Color("#a9d6d0"))
     performance_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    performance_label.visible = OS.has_feature("debug")
+    # Technical diagnostics belong in the developer console, not on the game map.
+    performance_label.visible = false
     add_child(performance_label)
     get_parent().get_node("Company").companies_updated.connect(_companies_updated)
     get_parent().get_node("Company").wallets_updated.connect(_wallets_updated)

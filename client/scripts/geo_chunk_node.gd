@@ -65,14 +65,16 @@ func _draw() -> void:
                 continue
             var metres := float(ROAD_METRES.get(subtype, 6.0))
             if casing:
-                draw_polyline(feature["pts"], Color("#263e46", 0.95), _width(metres + 2.0, 2.2 if minor else 3.4), false)
+                draw_polyline(feature["pts"], Color("#354b52", 0.98), _width(metres + 2.0, 2.2 if minor else 3.4), false)
             else:
-                draw_polyline(feature["pts"], Color("#9ca6a3", 0.95), _width(metres, 1.2 if minor else 2.2), false)
+                draw_polyline(feature["pts"], Color("#89958f", 0.98), _width(metres, 1.2 if minor else 2.2), false)
     if lod <= 1:
         for feature in features:
             if str(feature["kind"]) == "building":
-                _fill(feature, Color("#8fa3aa", 0.2))
-                draw_polyline(feature["pts"], Color("#b6c6cb", 0.65), _px(1.0), false)
+                # Real OSM building footprints: restrained roof and shadow.
+                # Never invent building height, type or cadastral ownership.
+                _fill(feature, Color("#c6b7a1", 0.74))
+                draw_polyline(feature["pts"], Color("#eee0c7", 0.88), _px(1.5), false)
     for feature in features:
         match str(feature["kind"]):
             "contour":
