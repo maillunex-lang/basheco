@@ -32,6 +32,8 @@ var dragging := false
 var touches: Dictionary = {}
 var pinch_distance := 0.0
 var selected_plot := -1
+var fade_occluding_buildings := false
+var occlusion_button: Button
 const ZONE_ICONS := {
     "commercial": preload("res://assets/icons/shop.svg"),
     "industrial": preload("res://assets/icons/workshop.svg"),
@@ -49,6 +51,12 @@ func _ready() -> void:
     hud.add_theme_font_size_override("font_size", 19)
     add_child(hud)
     hud.visible = false
+    occlusion_button = Button.new()
+    occlusion_button.text = "Скрыть здания"
+    occlusion_button.position = Vector2(18, 52)
+    occlusion_button.pressed.connect(_toggle_occlusion)
+    add_child(occlusion_button)
+    occlusion_button.visible = false
     _update_hud()
     $API.sector_loaded.connect(_on_sector_loaded)
     $API.request_failed.connect(_on_api_error)
@@ -62,6 +70,12 @@ func _process(_delta: float) -> void:
         _viewport_cooldown = maxf(0.0, _viewport_cooldown - _delta)
         if _viewport_cooldown <= 0.0 and not $API.access_token.is_empty():
             _request_camera_parcels()
+
+func _toggle_occlusion() -> void:
+    fade_occluding_buildings = not fade_occluding_buildings
+    occlusion_button.text = "Показать здания" if fade_occluding_buildings else "Скрыть здания"
+    queue_redraw()
+
 
 func _focus_on_district() -> void:
     var focus_tile: Vector2 = geo_background.origin_tile if current_location_id != "ufa" else Vector2(12.0, 12.0)
@@ -122,6 +136,7 @@ func _on_sector_loaded(data: Dictionary) -> void:
         ufa_saved_plots = verified.duplicate(true)
     plots = verified
     world_visible = true
+    occlusion_button.visible = true
     var sector: Dictionary = data.get("sector", {})
     ufa_saved_size = Vector2i(0, 0)
     _apply_geography_extent()
@@ -142,6 +157,7 @@ func open_location(location_id: String) -> bool:
     _apply_geography_extent()
     selected_plot = -1
     world_visible = true
+    occlusion_button.visible = true
     _focus_on_district()
     _update_hud()
     if has_node("HUD"):
