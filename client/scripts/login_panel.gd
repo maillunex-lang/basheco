@@ -2,6 +2,7 @@ extends CanvasLayer
 ## Minimal login panel, intentionally does not persist credentials or tokens.
 var api: Node
 var endpoint: LineEdit
+var display_name: LineEdit
 var email: LineEdit
 var password: LineEdit
 var status_label: Label
@@ -26,6 +27,9 @@ func _ready() -> void:
     endpoint.placeholder_text = "Адрес игрового API (HTTPS)"
     endpoint.text = "https://rikagro.ru/basheco/api"
     layout.add_child(endpoint)
+    display_name = LineEdit.new()
+    display_name.placeholder_text = "Имя игрока"
+    layout.add_child(display_name)
     email = LineEdit.new()
     email.placeholder_text = "Электронная почта"
     layout.add_child(email)
@@ -58,6 +62,9 @@ func _register() -> void:
     if not url.begins_with("https://") and not url.begins_with("http://127.0.0.1:"):
         status_label.text = "Для регистрации требуется HTTPS"
         return
+    if display_name.text.strip_edges().length() < 2:
+        status_label.text = "Укажите имя игрока"
+        return
     if password.text.length() < 12:
         status_label.text = "Пароль: минимум 12 символов"
         return
@@ -67,7 +74,7 @@ func _register() -> void:
         registration_http.request_completed.connect(_on_register_result)
     var body := JSON.stringify({
         "email": email.text.strip_edges(),
-        "display_name": email.text.get_slice("@", 0),
+        "display_name": display_name.text.strip_edges(),
         "password": password.text
     })
     password.clear()
