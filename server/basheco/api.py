@@ -352,3 +352,41 @@ def market_cancel_listing(listing_id: UUID, account_id: str = Depends(current_us
 @app.post("/v1/market/listings/{listing_id}/buy", status_code=201)
 def market_buy(listing_id: UUID, data: BuyRequest, account_id: str = Depends(current_user)):
     return buy(listing_id, data, account_id)
+
+@app.get("/v1/geography/locations")
+def geography_locations():
+    """Public, bounded settlement catalog. No personal or inferred financial data."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT id,name,kind,municipality_id,centroid_lon,centroid_lat,"
+            "geography_source,geography_observed_on,playable FROM geo_locations "
+            "ORDER BY name,id LIMIT 1000"
+        ).fetchall()
+    return {"locations": rows, "coverage": "partial", "complete": False}
+
+
+@app.get("/v1/geography/locations/{location_id}")
+def geography_location_detail(location_id: str):
+    if not re.fullmatch(r"[a-z0-9_-]{1,80}", location_id):
+        raise HTTPException(422, "Invalid location ID")
+    with connect() as conn:
+        location = conn.execute(
+            "SELECT id,name,kind,municipality_id,centroid_lon,centroid_lat,"
+            "geography_source,geography_observed_on,playable "
+            "FROM geo_locations WHERE id=%s", (location_id,)
+        ).fetchone()
+        if not location:
+            raise HTTPException(404, "Location not found")
+        statistics = conn.execute(
+            "SELECT indicator,reference_year,value,unit,source_name,source_url,"
+            "published_on,retrieved_on,geography_scope "
+            "FROM geo_statistics WHERE location_id=%s "
+            "ORDER BY indicator,reference_year DESC LIMIT 100", (location_id,)
+        ).fetchall()
+        simulation = conn.execute(
+            "SELECT simulation_population,simulation_monthly_income_kopecks,"
+            "simulation_consumption_fraction,source_statistics_year,updated_at "
+            "FROM npc_economy_parameters WHERE location_id=%s", (location_id,)
+        ).fetchone()
+    return {"location": location, "official_statistics": statistics,
+            "npc_simulation": simulation, "simulation_is_not_official_statistics": True}
