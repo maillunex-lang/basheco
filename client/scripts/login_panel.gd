@@ -51,6 +51,33 @@ func _ready() -> void:
     status_label.text = "Для доступа необходима учётная запись"
     layout.add_child(status_label)
 
+var registration_http: HTTPRequest
+
+func _register() -> void:
+    var url := endpoint.text.strip_edges().trim_suffix("/")
+    if not url.begins_with("https://") and not url.begins_with("http://127.0.0.1:"):
+        status_label.text = "Для регистрации требуется HTTPS"
+        return
+    if password.text.length() < 12:
+        status_label.text = "Пароль: минимум 12 символов"
+        return
+    if registration_http == null:
+        registration_http = HTTPRequest.new()
+        add_child(registration_http)
+        registration_http.request_completed.connect(_on_register_result)
+    var body := JSON.stringify({
+        "email": email.text.strip_edges(),
+        "display_name": email.text.get_slice("@", 0),
+        "password": password.text
+    })
+    password.clear()
+    var headers := PackedStringArray(["Content-Type: application/json"])
+    var result := registration_http.request(url + "/v1/auth/register", headers, HTTPClient.METHOD_POST, body)
+    status_label.text = "Регистрация..." if result == OK else "Не удалось отправить запрос"
+
+func _on_register_result(_result: int, status: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
+    status_label.text = "Аккаунт создан. Теперь войдите." if status == 201 else "Ошибка регистрации: HTTP " + str(status)
+
 func _login() -> void:
     var url := endpoint.text.strip_edges()
     if not url.begins_with("https://") and not url.begins_with("http://127.0.0.1:"):
