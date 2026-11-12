@@ -1,0 +1,37 @@
+extends SceneTree
+## Headless scene smoke: map fixtures, OSM data, selection, touch gestures.
+func _initialize() -> void:
+    call_deferred("_run")
+
+func _run() -> void:
+    var scene: PackedScene = load("res://scenes/world.tscn")
+    var world: Node2D = scene.instantiate()
+    root.add_child(world)
+    await process_frame
+    assert(world.plots.size() == 6)
+    assert(world.get_node("OSM").features.size() >= 1)
+    assert(world.get_node("API") != null)
+    assert(world.get_node("Login") != null)
+    var p: Dictionary = world.plots[0]
+    var center: Vector2 = world.project_point(
+        float(p["tile_x"]) + float(p["width_tiles"]) / 2.0,
+        float(p["tile_y"]) + float(p["height_tiles"]) / 2.0)
+    world._select_at(center)
+    assert(world.selected_plot == 0)
+    var down := InputEventScreenTouch.new()
+    down.index = 0
+    down.pressed = true
+    down.position = Vector2(200, 300)
+    world._unhandled_input(down)
+    var drag := InputEventScreenDrag.new()
+    drag.index = 0
+    drag.position = Vector2(220, 320)
+    world._unhandled_input(drag)
+    assert(world.camera_offset.distance_to(Vector2(670, 110)) < 0.01)
+    var up := InputEventScreenTouch.new()
+    up.index = 0
+    up.position = drag.position
+    up.pressed = false
+    world._unhandled_input(up)
+    print("BASHECO_GODOT_SMOKE_OK plots=6 osm=",world.get_node("OSM").features.size())
+    quit(0)
