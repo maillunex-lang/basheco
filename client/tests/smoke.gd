@@ -35,6 +35,12 @@ func _run() -> void:
     market._set_companies([{"id":"test-company-2", "name":"Другая компания"}, {"id":"test-company-1", "name":"Тестовая компания"}])
     assert(market._selected_company_id() == "test-company-2")
     assert(world.get_node("Login").display_name != null)
+    var nav = world.get_node("Navigation")
+    nav._show_section("Build")
+    assert(build_panel.panel.visible)
+    assert(not market.panel.visible)
+    nav._show_section("")
+    assert(not build_panel.panel.visible)
     var p: Dictionary = world.plots[0]
     var center: Vector2 = world.project_point(
         float(p["tile_x"]) + float(p["width_tiles"]) / 2.0,
