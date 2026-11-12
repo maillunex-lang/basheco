@@ -57,3 +57,38 @@ def clipped_linestring(points, bbox):
     """Return visible independent segments; never join disjoint clipped parts."""
     return [clipped for a, b in zip(points, points[1:])
             if (clipped := clip_segment(a, b, bbox)) is not None]
+
+
+def clip_polygon(points: list[tuple[float, float]],
+                 bbox: tuple[float, float, float, float]) -> list[tuple[float, float]]:
+    """Sutherland-Hodgman polygon clipping against a finite rectangular extract."""
+    xmin, ymin, xmax, ymax = bbox
+    if xmin >= xmax or ymin >= ymax:
+        raise ValueError('Invalid bbox')
+    polygon = list(points)
+    if len(polygon) > 1 and polygon[0] == polygon[-1]:
+        polygon.pop()
+    for axis, boundary, keep_greater in ((0,xmin,True),(0,xmax,False),
+                                          (1,ymin,True),(1,ymax,False)):
+        if not polygon:
+            break
+        result = []
+        previous = polygon[-1]
+        def inside(point):
+            return point[axis] >= boundary if keep_greater else point[axis] <= boundary
+        for current in polygon:
+            curr_inside = inside(current)
+            prev_inside = inside(previous)
+            if curr_inside != prev_inside:
+                delta = current[axis] - previous[axis]
+                if delta:
+                    t = (boundary - previous[axis]) / delta
+                    result.append((previous[0] + t * (current[0]-previous[0]),
+                                   previous[1] + t * (current[1]-previous[1])))
+            if curr_inside:
+                result.append(current)
+            previous = current
+        polygon = result
+    if len(polygon) < 3:
+        return []
+    return polygon + [polygon[0]]
