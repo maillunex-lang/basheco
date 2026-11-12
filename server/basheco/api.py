@@ -277,3 +277,21 @@ def economy_inventory(account_id: str = Depends(current_user)):
 @app.post("/v1/economy/produce", status_code=201)
 def economy_produce(data: ProduceRequest, account_id: str = Depends(current_user)):
     return produce(data, account_id)
+
+from basheco.market import ListRequest, BuyRequest, listings, create_listing, cancel_listing, buy
+
+@app.get("/v1/market/listings")
+def market_listings(account_id: str = Depends(current_user)):
+    return listings()
+
+@app.post("/v1/market/listings", status_code=201)
+def market_create_listing(data: ListRequest, account_id: str = Depends(current_user)):
+    return create_listing(data, account_id)
+
+@app.post("/v1/market/listings/{listing_id}/cancel")
+def market_cancel_listing(listing_id: UUID, account_id: str = Depends(current_user)):
+    return cancel_listing(listing_id, account_id)
+
+@app.post("/v1/market/listings/{listing_id}/buy", status_code=201)
+def market_buy(listing_id: UUID, data: BuyRequest, account_id: str = Depends(current_user)):
+    return buy(listing_id, data, account_id)
