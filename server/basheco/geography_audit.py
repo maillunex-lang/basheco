@@ -15,7 +15,9 @@ from basheco.land_constraints import assess_cells, footprint_cells
 from basheco.world_grid import CELL_METRES, cell_to_metre_corner
 
 
-def audit(root: Path = DEFAULT_ROOT, worldcover_path: Path | None = None) -> dict:
+def audit(root: Path = DEFAULT_ROOT, worldcover_path: Path | None = None,
+          dem_path: Path | None = None, dem_source: str = "",
+          dem_version: str = "") -> dict:
     bundle = build(root)
     municipalities = {m["id"]: m for m in json.loads(
         (root / "municipalities.json").read_text(encoding="utf-8"))["municipalities"]}
@@ -52,6 +54,14 @@ def audit(root: Path = DEFAULT_ROOT, worldcover_path: Path | None = None) -> dic
         if worldcover_path is not None and selection["settlement_id"] == "S80652440101":
             from basheco.worldcover_source import worldcover_evidence
             evidence = worldcover_evidence(footprint_cells(location), worldcover_path)
+        if dem_path is not None and selection["settlement_id"] == "S80652440101":
+            from basheco.dem_source import dem_evidence
+            dem = dem_evidence(footprint_cells(location), dem_path,
+                               source=dem_source, source_version=dem_version)
+            if evidence is None:
+                evidence = dem
+            else:
+                evidence["layers"].update(dem["layers"])
         land = assess_cells(footprint_cells(location), evidence)
         results.append({"settlement_id": selection["settlement_id"],
                         "municipality_id": mid,
@@ -84,8 +94,14 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--pilot-worldcover", type=Path,
                         help="Local ESA WorldCover 2021 v200 GeoTIFF for pilot only")
+    parser.add_argument("--pilot-dem", type=Path,
+                        help="Local projected metric GeoTIFF DEM for pilot")
+    parser.add_argument("--dem-source", default="")
+    parser.add_argument("--dem-version", default="")
     args = parser.parse_args()
-    report = audit(worldcover_path=args.pilot_worldcover)
+    report = audit(worldcover_path=args.pilot_worldcover,
+                   dem_path=args.pilot_dem, dem_source=args.dem_source,
+                   dem_version=args.dem_version)
     data = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
