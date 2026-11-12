@@ -13,6 +13,8 @@ const WorldOverlay = preload("res://scripts/world_overlay.gd")
 var geo_background = GeoBackground.new()
 const DEFAULT_SETTLEMENT := "ufa"
 var current_location_id := DEFAULT_SETTLEMENT
+var admin_target_name := ""
+var admin_target_cell := Vector2i.ZERO
 const MAX_VISIBLE_TILES := 18000
 const MIN_ZOOM := 0.004
 const MAX_ZOOM := 2.4
@@ -148,6 +150,10 @@ func center_on_cell(cell: Vector2i, fraction: Vector2 = Vector2(0.5, 0.5)) -> vo
     _camera_changed()
 
 func _focus_on_district() -> void:
+    if not admin_target_name.is_empty():
+        zoom_level = DEFAULT_ZOOM
+        center_on_cell(admin_target_cell)
+        return
     # "⌖ Район": back to the nearest settlement's sourced area at working zoom.
     var target := DEFAULT_SETTLEMENT
     if camera_initialized:
@@ -189,6 +195,10 @@ func _rebase_origin() -> void:
 func _camera_changed() -> void:
     _clamp_camera()
     _rebase_origin()
+    # Once the player pans away, do not keep showing the previous village title.
+    if not admin_target_name.is_empty() and camera_center_cell().distance_to(admin_target_cell) > 256:
+        admin_target_name = ""
+        _update_hud()
     var here: String = geo_background.settlement_at(camera_center_cell())
     if here != current_location_id:
         current_location_id = here
@@ -267,6 +277,7 @@ func _on_sector_loaded(data: Dictionary) -> void:
 func open_location(location_id: String) -> bool:
     if not geo_background.ready or not geo_background.settlements.has(location_id):
         return false
+    admin_target_name = ""
     selected_plot = -1
     world_visible = true
     occlusion_button.visible = true
@@ -278,10 +289,12 @@ func open_location(location_id: String) -> bool:
 
 ## Administrative catalog navigation: the registry provides a global cell, not an atlas-local id.
 ## A valid settlement without imported OSM detail is still a navigable map location.
-func open_world_cell(cell: Vector2i, _settlement_name: String = "") -> bool:
+func open_world_cell(cell: Vector2i, settlement_name: String = "") -> bool:
     if not geo_background.ready:
         return false
     selected_plot = -1
+    admin_target_name = settlement_name
+    admin_target_cell = cell
     world_visible = true
     occlusion_button.visible = true
     zoom_level = DEFAULT_ZOOM
@@ -448,6 +461,8 @@ func _select_at(point: Vector2) -> void:
     overlay.queue_redraw()
 
 func location_title() -> String:
+    if not admin_target_name.is_empty():
+        return admin_target_name.to_upper()
     if geo_background.settlements.has(current_location_id):
         return str(geo_background.settlements[current_location_id]["name"]).to_upper()
     return "РЕСПУБЛИКА БАШКОРТОСТАН"
