@@ -10,3 +10,8 @@ __pycache__/
 client/build/
 client/data/*.local-prepull.json
 client/scripts/*.gd.uid
+
+# Godot generated imports and translations
+*.import
+*.translation
+*.gd.uid
