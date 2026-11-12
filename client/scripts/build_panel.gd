@@ -46,7 +46,7 @@ func _build() -> void:
     if not plot.has("id") or str(plot.get("owner_company_id", "")) not in ["", "<null>"]:
         message.text = "Нужен свободный участок с сервера"
         return
-    var kind := {"commercial":"shop", "industrial":"workshop", "agricultural":"greenhouse"}.get(str(plot["zone"]), "")
+    var kind: String = {"commercial":"shop", "industrial":"workshop", "agricultural":"greenhouse"}.get(str(plot["zone"]), "")
     var payload := JSON.stringify({"company_id":company.text.strip_edges(), "plot_id":str(plot["id"]), "building_type":kind})
     var headers := PackedStringArray(["Authorization: Bearer " + api.access_token, "Content-Type: application/json"])
     var err := http.request(api.base_url + "/v1/world/buildings", headers, HTTPClient.METHOD_POST, payload)
