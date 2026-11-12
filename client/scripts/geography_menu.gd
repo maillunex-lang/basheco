@@ -126,6 +126,8 @@ func _render() -> void:
     title_label.text = "Поиск по республике" if level == 0 else ("Районы и округа" if level == 1 else str(current_district.get("name", "")))
     var items := _results()
     var start := page * PAGE_SIZE
+    if page > 0:
+        _entry("← Предыдущая страница", "", func(): page -= 1; _render(), true)
     for i in range(start, mini(start + PAGE_SIZE, items.size())):
         var result: Dictionary = items[i]
         if result["kind"] == "district":
@@ -135,20 +137,26 @@ func _render() -> void:
             var location: Dictionary = result["data"]
             var district: Dictionary = result["district"]
             var cell: Variant = location.get("cell")
-            var available := typeof(cell) == TYPE_ARRAY and cell.size() == 2
-            var caption := str(location.get("type", "")) + " · " + str(district["name"])
+            var available: bool = typeof(cell) == TYPE_ARRAY and cell.size() == 2
+            var caption := str(location.get("type", ""))
+            var unit := str(location.get("unit", ""))
+            if not unit.is_empty():
+                caption += " · " + unit
+            caption += " · " + str(district["name"])
+            caption += " · " + str(location.get("id", "")).trim_prefix("S")
             if not available:
                 caption += " · координаты не подтверждены"
             _entry(str(location["name"]), caption, func(): _enter_location(location), available)
     if start + PAGE_SIZE < items.size():
-        _entry("Показать ещё", str(items.size() - start - PAGE_SIZE) + " записей", func(): page += 1; _render(), true)
+        _entry("Следующая страница →", str(items.size() - start - PAGE_SIZE) + " записей", func(): page += 1; _render(), true)
     status_label.text = "Найдено: %d. Показано: %d." % [items.size(), mini(start + PAGE_SIZE, items.size())]
 
 func _entry(name: String, subtitle: String, action: Callable, enabled: bool) -> void:
     var button := Button.new()
     button.text = name + "\n" + subtitle
     button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-    button.custom_minimum_size.y = 55
+    button.custom_minimum_size.y = 68
+    button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     button.disabled = not enabled
     button.pressed.connect(action)
     list_box.add_child(button)
