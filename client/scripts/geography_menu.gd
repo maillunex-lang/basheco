@@ -2,6 +2,8 @@ extends CanvasLayer
 ## Navigation from the versioned OKTMO registry; no per-city scenes or invented locations.
 const CATALOG := "res://data/admin_navigation.json"
 const PAGE_SIZE := 60
+const GENERATED := "res://data/generated_locations.json"
+var available_locations: Dictionary = {}
 var panel: PanelContainer
 var title_label: Label
 var list_box: VBoxContainer
@@ -19,6 +21,20 @@ func _ready() -> void:
         var parsed: Variant = JSON.parse_string(file.get_as_text())
         if typeof(parsed) == TYPE_DICTIONARY and parsed.get("schema", "") == "basheco.navigation/1":
             catalog = parsed
+    # The full official registry stays intact. Only built, confirmed locations
+    # enter the public picker; empty settlements do not clutter the UI.
+    var generated_file := FileAccess.open(GENERATED, FileAccess.READ)
+    if generated_file != null:
+        var generated: Variant = JSON.parse_string(generated_file.get_as_text())
+        if typeof(generated) == TYPE_DICTIONARY and generated.get("schema", "") == "basheco.generated_locations/1":
+            for location in generated.get("locations", []):
+                var has_building := false
+                for obj in location.get("objects", []):
+                    if str(obj.get("kind", "")) == "house":
+                        has_building = true
+                        break
+                if has_building:
+                    available_locations[str(location.get("settlement_id", ""))] = true
     panel = PanelContainer.new()
     panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     panel.offset_left = 16
@@ -86,6 +102,17 @@ func _on_search(_value: String) -> void:
 func _matches(haystack: String, query: String) -> bool:
     return haystack.to_lower().contains(query)
 
+func _is_available(item: Dictionary) -> bool:
+    var cell: Variant = item.get("cell")
+    return available_locations.has(str(item.get("id", ""))) and typeof(cell) == TYPE_ARRAY and cell.size() == 2
+
+func _available_count(district: Dictionary) -> int:
+    var count := 0
+    for location in district.get("locations", []):
+        if _is_available(location):
+            count += 1
+    return count
+
 func _results() -> Array[Dictionary]:
     var result: Array[Dictionary] = []
     var query := search_field.text.strip_edges().to_lower()
@@ -95,15 +122,22 @@ func _results() -> Array[Dictionary]:
         return result
     if level == 1 or (level == 0 and not query.is_empty()):
         for district in catalog.get("districts", []):
+            var visible_count := _available_count(district)
+            if visible_count == 0:
+                continue
             if query.is_empty() or _matches(str(district.get("name", "")), query):
                 result.append({"kind": "district", "data": district})
             if not query.is_empty():
                 for settlement in district.get("locations", []):
+                    if not _is_available(settlement):
+                        continue
                     var label := str(settlement.get("name", "")) + " " + str(settlement.get("unit", ""))
                     if _matches(label, query):
                         result.append({"kind": "settlement", "data": settlement, "district": district})
     else:
         for settlement in current_district.get("locations", []):
+            if not _is_available(settlement):
+                continue
             var label := str(settlement.get("name", "")) + " " + str(settlement.get("unit", ""))
             if query.is_empty() or _matches(label, query):
                 result.append({"kind": "settlement", "data": settlement, "district": current_district})
@@ -120,8 +154,8 @@ func _render() -> void:
         return
     if level == 0 and search_field.text.strip_edges().is_empty():
         title_label.text = "Республика Башкортостан"
-        _entry("Районы и городские округа", "63 территории", func(): _open_districts(), true)
-        status_label.text = "Выберите территорию или найдите населённый пункт по названию."
+        _entry("Доступные районы", "Только локации с постройками", func(): _open_districts(), true)
+        status_label.text = "Пока доступна Михайловка. Остальные населённые пункты появятся после строительства."
         return
     title_label.text = "Поиск по республике" if level == 0 else ("Районы и округа" if level == 1 else str(current_district.get("name", "")))
     var items := _results()
@@ -132,7 +166,7 @@ func _render() -> void:
         var result: Dictionary = items[i]
         if result["kind"] == "district":
             var district: Dictionary = result["data"]
-            _entry(str(district["name"]), str(district.get("locations", []).size()) + " населённых пунктов", func(): _select_district(district), true)
+            _entry(str(district["name"]), str(_available_count(district)) + " доступных населённых пунктов", func(): _select_district(district), true)
         else:
             var location: Dictionary = result["data"]
             var district: Dictionary = result["district"]
@@ -174,9 +208,9 @@ func _select_district(item: Dictionary) -> void:
     _render()
 
 func _enter_location(item: Dictionary) -> void:
-    var cell: Variant = item.get("cell")
-    if typeof(cell) != TYPE_ARRAY or cell.size() != 2:
+    if not _is_available(item):
         return
+    var cell: Variant = item.get("cell")
     var parent := get_parent()
     if parent.has_method("open_world_cell"):
         if parent.open_world_cell(Vector2i(int(cell[0]), int(cell[1])), str(item.get("name", ""))):
