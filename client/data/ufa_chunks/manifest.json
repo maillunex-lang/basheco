@@ -1,0 +1,113 @@
+{
+  "city": "Уфа",
+  "district": "Центральная часть Уфы (пилот, не административная граница)",
+  "license": "ODbL 1.0",
+  "attribution": "© OpenStreetMap contributors",
+  "source_url": "https://api.openstreetmap.org/api/0.6/map?bbox=55.971,54.7377,55.973,54.7395",
+  "downloaded_utc": "2026-11-12T07:46:27.470639+00:00",
+  "bbox": [
+    55.971,
+    54.7377,
+    55.973,
+    54.7395
+  ],
+  "grid_size": 4,
+  "chunks": [
+    {
+      "x": 0,
+      "y": 0,
+      "path": "res://data/ufa_chunks/chunk_0_0.json",
+      "feature_count": 6
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "path": "res://data/ufa_chunks/chunk_1_0.json",
+      "feature_count": 5
+    },
+    {
+      "x": 2,
+      "y": 0,
+      "path": "res://data/ufa_chunks/chunk_2_0.json",
+      "feature_count": 6
+    },
+    {
+      "x": 3,
+      "y": 0,
+      "path": "res://data/ufa_chunks/chunk_3_0.json",
+      "feature_count": 7
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "path": "res://data/ufa_chunks/chunk_0_1.json",
+      "feature_count": 5
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "path": "res://data/ufa_chunks/chunk_1_1.json",
+      "feature_count": 5
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "path": "res://data/ufa_chunks/chunk_2_1.json",
+      "feature_count": 7
+    },
+    {
+      "x": 3,
+      "y": 1,
+      "path": "res://data/ufa_chunks/chunk_3_1.json",
+      "feature_count": 7
+    },
+    {
+      "x": 0,
+      "y": 2,
+      "path": "res://data/ufa_chunks/chunk_0_2.json",
+      "feature_count": 6
+    },
+    {
+      "x": 1,
+      "y": 2,
+      "path": "res://data/ufa_chunks/chunk_1_2.json",
+      "feature_count": 6
+    },
+    {
+      "x": 2,
+      "y": 2,
+      "path": "res://data/ufa_chunks/chunk_2_2.json",
+      "feature_count": 7
+    },
+    {
+      "x": 3,
+      "y": 2,
+      "path": "res://data/ufa_chunks/chunk_3_2.json",
+      "feature_count": 8
+    },
+    {
+      "x": 0,
+      "y": 3,
+      "path": "res://data/ufa_chunks/chunk_0_3.json",
+      "feature_count": 4
+    },
+    {
+      "x": 1,
+      "y": 3,
+      "path": "res://data/ufa_chunks/chunk_1_3.json",
+      "feature_count": 6
+    },
+    {
+      "x": 2,
+      "y": 3,
+      "path": "res://data/ufa_chunks/chunk_2_3.json",
+      "feature_count": 6
+    },
+    {
+      "x": 3,
+      "y": 3,
+      "path": "res://data/ufa_chunks/chunk_3_3.json",
+      "feature_count": 7
+    }
+  ]
+}
