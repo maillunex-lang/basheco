@@ -43,7 +43,7 @@ func _ready() -> void:
     plus.pressed.connect(func(): world.zoom_at(get_viewport().get_visible_rect().size * 0.5, 1.2))
     row.add_child(plus)
     geo_credit = Label.new()
-    geo_credit.text = "© OpenStreetMap contributors · ODbL 1.0 · География: пилот, не вся Уфа"
+    geo_credit.text = "© OpenStreetMap contributors · ODbL · Рельеф: SRTM / OpenTopoData · пилот"
     geo_credit.add_theme_color_override("font_color", Color("#dbe6e2"))
     geo_credit.add_theme_font_size_override("font_size", 13)
     geo_credit.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -82,4 +82,4 @@ func update_geography_credit(location_id: String) -> void:
     if geo_credit == null:
         return
     var place := "Михайловка" if location_id == "mikhailovka" else "Уфа"
-    geo_credit.text = "© OpenStreetMap contributors · ODbL 1.0 · " + place + " · фрагмент, не вся карта"
+    geo_credit.text = "© OpenStreetMap contributors · ODbL · SRTM / OpenTopoData · " + place + " (пилот)"
