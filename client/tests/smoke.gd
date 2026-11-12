@@ -40,8 +40,10 @@ func _run() -> void:
     assert(chunks.chunk_for_tile(63, 63) == Vector2i(0, 0))
     assert(chunks.chunk_for_tile(64, 64) == Vector2i(1, 1))
     assert(chunks.chunk_for_tile(-1, -1) == Vector2i(-1, -1))
-    assert(chunks.chunks_for_bounds([0, 0, 64, 64], 0).size() == 1)
-    assert(chunks.chunks_for_bounds([63, 63, 65, 65], 0).size() == 4)
+    var one_chunk: Array[int] = [0, 0, 64, 64]
+    var four_chunks: Array[int] = [63, 63, 65, 65]
+    assert(chunks.chunks_for_bounds(one_chunk, 0).size() == 1)
+    assert(chunks.chunks_for_bounds(four_chunks, 0).size() == 4)
     var hud = world.get_node("HUD")
     assert(hud.company_label.text == "Компания не выбрана")
     hud._companies_updated([{"name":"Тестовая компания"}])
