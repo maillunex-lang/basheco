@@ -9,6 +9,10 @@ func _run() -> void:
     root.add_child(world)
     await process_frame
     assert(world.plots.size() == 6)
+    assert(world.world_width == 200 and world.world_height == 200)
+    var visible: Array[int] = world._visible_tile_bounds()
+    assert(visible[2] - visible[0] < 200)
+    assert(visible[3] - visible[1] < 200)
     var osm = world.get_node("OSM")
     assert(osm.features.size() >= 1)
     assert(osm.chunk_paths.size() == 16)
