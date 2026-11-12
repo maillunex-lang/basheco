@@ -128,7 +128,10 @@ func open_location(location_id: String) -> bool:
     if not geo_background.ready:
         return false
     current_location_id = location_id
-    plots = ufa_saved_plots.duplicate(true) if location_id == "ufa" and not ufa_saved_plots.is_empty() else (plots if location_id == "ufa" else [])
+    if location_id == "ufa":
+        plots = ufa_saved_plots.duplicate(true)
+    else:
+        plots.clear()
     selected_plot = -1
     world_visible = true
     _focus_on_district()
