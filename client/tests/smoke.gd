@@ -208,6 +208,11 @@ func _run() -> void:
 
     # --- existing interface still works ----------------------------------------------
     check(world.get_node("Login") != null and world.get_node("Login").display_name != null, "login panel")
+    var login = world.get_node("Login")
+    check(login.heading.text == "BASHECO" and login.demo_button.text.contains("без входа"), "alpha main menu actions")
+    check(login.scroll != null and login.scroll.visible, "login card scrolls on compact screens")
+    login._login()
+    check(not login.busy and login.status_label.text == "Введите почту и пароль", "empty login does not lock buttons")
     check(api != null, "api node")
     var build_panel = world.get_node("Build")
     check(build_panel.company_ids.is_empty(), "build panel starts empty")
