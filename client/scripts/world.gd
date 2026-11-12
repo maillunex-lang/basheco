@@ -458,6 +458,8 @@ func draw_overlay(canvas: CanvasItem) -> void:
             canvas.draw_circle(where, 3.0, Color("#142634"))
             canvas.draw_string(font, where + Vector2(10, 6), str(settlement["name"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#f3f6f0"))
 
+    GeneratedTown.draw_minimap(canvas, self)
+
 # --- Input ---------------------------------------------------------------------
 
 # Handle world gestures before transparent CanvasLayer HUD controls can
