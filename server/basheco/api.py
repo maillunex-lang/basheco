@@ -16,7 +16,7 @@ from basheco.ledger import Transfer, validate_transfer
 
 app = FastAPI(title="BASHECO API", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
 ph = PasswordHasher(time_cost=2, memory_cost=65536, parallelism=2)
-EMAIL_RE = re.compile(r"^[^\\s@]{1,64}@[^\\s@]{1,190}\\.[^\\s@]{2,}$")
+EMAIL_RE = re.compile(r"^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$")
 
 class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=255)
